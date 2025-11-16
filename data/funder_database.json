@@ -1,0 +1,200 @@
+{
+  "funders": [
+    {
+      "name": "National Science Foundation",
+      "website": "https://www.nsf.gov",
+      "focus_areas": [
+        "science",
+        "research",
+        "education",
+        "engineering",
+        "mathematics",
+        "computer science"
+      ],
+      "requirements": {
+        "application_format": "Online via FastLane or Research.gov",
+        "required_documents": [
+          "Project Summary",
+          "Project Description",
+          "References Cited",
+          "Biographical Sketches",
+          "Budget and Budget Justification",
+          "Current and Pending Support"
+        ],
+        "eligibility": [
+          "U.S. institutions of higher education",
+          "Non-profit organizations",
+          "For-profit organizations (limited)",
+          "State and local governments"
+        ]
+      },
+      "deadlines": {
+        "next_deadline": "Varies by program",
+        "frequency": "Multiple deadlines throughout year",
+        "notes": "Different programs have different deadlines. Check specific program pages."
+      },
+      "funding_amounts": {
+        "typical_range": "$50,000 - $2,000,000",
+        "maximum": "Varies by program"
+      },
+      "mission": "To promote the progress of science; to advance the national health, prosperity, and welfare; to secure the national defense",
+      "values": [
+        "Excellence",
+        "Merit review",
+        "Broad impact",
+        "Innovation"
+      ],
+      "priorities": [
+        "Basic research",
+        "STEM education",
+        "Broadening participation",
+        "International collaboration"
+      ]
+    },
+    {
+      "name": "National Institutes of Health",
+      "website": "https://www.nih.gov",
+      "focus_areas": [
+        "biomedical research",
+        "health",
+        "disease prevention",
+        "public health"
+      ],
+      "requirements": {
+        "application_format": "Online via eRA Commons",
+        "required_documents": [
+          "Research Strategy",
+          "Specific Aims",
+          "Research Design",
+          "Budget",
+          "Biosketches",
+          "Resource Sharing Plans"
+        ],
+        "eligibility": [
+          "U.S. institutions",
+          "Foreign institutions (limited)",
+          "Small businesses",
+          "Individual researchers"
+        ]
+      },
+      "deadlines": {
+        "next_deadline": "Varies by grant type",
+        "frequency": "Three standard deadlines per year (Feb 5, Jun 5, Oct 5)",
+        "notes": "Standard deadlines for most R01 grants"
+      },
+      "funding_amounts": {
+        "typical_range": "$100,000 - $500,000 per year",
+        "maximum": "Varies by grant type"
+      },
+      "mission": "To seek fundamental knowledge about the nature and behavior of living systems and the application of that knowledge to enhance health, lengthen life, and reduce illness and disability",
+      "values": [
+        "Scientific excellence",
+        "Public health impact",
+        "Ethical research",
+        "Diversity and inclusion"
+      ],
+      "priorities": [
+        "Basic biomedical research",
+        "Clinical research",
+        "Health disparities",
+        "Translational research"
+      ]
+    },
+    {
+      "name": "Bill & Melinda Gates Foundation",
+      "website": "https://www.gatesfoundation.org",
+      "focus_areas": [
+        "global health",
+        "education",
+        "poverty alleviation",
+        "gender equality"
+      ],
+      "requirements": {
+        "application_format": "Online application portal",
+        "required_documents": [
+          "Concept Note",
+          "Full Proposal (if invited)",
+          "Budget",
+          "Organizational Information"
+        ],
+        "eligibility": [
+          "Non-profit organizations",
+          "For-profit organizations (for specific programs)",
+          "Government agencies",
+          "International organizations"
+        ]
+      },
+      "deadlines": {
+        "next_deadline": "Rolling",
+        "frequency": "Rolling submissions",
+        "notes": "Most programs accept applications on a rolling basis"
+      },
+      "funding_amounts": {
+        "typical_range": "$100,000 - $10,000,000",
+        "maximum": "Varies significantly by program"
+      },
+      "mission": "To help all people lead healthy, productive lives",
+      "values": [
+        "Optimism",
+        "Collaboration",
+        "Rigor",
+        "Innovation",
+        "Impact"
+      ],
+      "priorities": [
+        "Global health equity",
+        "Education access",
+        "Gender equality",
+        "Climate adaptation"
+      ]
+    },
+    {
+      "name": "Ford Foundation",
+      "website": "https://www.fordfoundation.org",
+      "focus_areas": [
+        "social justice",
+        "economic opportunity",
+        "democratic participation",
+        "human rights"
+      ],
+      "requirements": {
+        "application_format": "Online application system",
+        "required_documents": [
+          "Letter of Inquiry",
+          "Full Proposal (if invited)",
+          "Budget",
+          "Organizational Information"
+        ],
+        "eligibility": [
+          "Non-profit organizations",
+          "Universities and colleges",
+          "Government agencies (limited)",
+          "International organizations"
+        ]
+      },
+      "deadlines": {
+        "next_deadline": "Varies by program",
+        "frequency": "Multiple deadlines per year",
+        "notes": "Check specific program pages for deadlines"
+      },
+      "funding_amounts": {
+        "typical_range": "$50,000 - $1,000,000",
+        "maximum": "Varies by program"
+      },
+      "mission": "To reduce poverty and injustice, strengthen democratic values, promote international cooperation, and advance human achievement",
+      "values": [
+        "Social justice",
+        "Equity",
+        "Inclusion",
+        "Transparency"
+      ],
+      "priorities": [
+        "Racial justice",
+        "Economic opportunity",
+        "Democratic participation",
+        "Gender and reproductive justice"
+      ]
+    }
+  ]
+}
+

@@ -1,0 +1,135 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  deploy-staging:
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run tests
+      run: |
+        pytest tests/ -v --tb=short
+      env:
+        DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        FLASK_ENV: testing
+    
+    - name: Deploy to Staging
+      run: |
+        echo "Deploying to staging environment..."
+        # Add your staging deployment commands here
+        # For Render, deployment happens automatically on git push
+        # For other platforms, add deployment commands
+    
+    - name: Health check
+      run: |
+        sleep 30
+        curl -f ${{ secrets.STAGING_HEALTH_CHECK_URL }} || exit 1
+    
+    - name: Notify deployment
+      if: always()
+      run: |
+        echo "Staging deployment completed"
+        # Add notification logic (Slack, email, etc.)
+
+  deploy-production:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
+    runs-on: ubuntu-latest
+    environment: production
+    needs: []
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run tests
+      run: |
+        pytest tests/ -v --tb=short
+      env:
+        DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        FLASK_ENV: testing
+    
+    - name: Create backup
+      run: |
+        echo "Creating production backup before deployment..."
+        # Add backup creation logic
+    
+    - name: Deploy to Production
+      run: |
+        echo "Deploying to production environment..."
+        # Add your production deployment commands here
+    
+    - name: Run database migrations
+      run: |
+        echo "Running database migrations..."
+        # alembic upgrade head
+      env:
+        DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+    
+    - name: Health check
+      run: |
+        sleep 30
+        for i in {1..30}; do
+          if curl -f ${{ secrets.PRODUCTION_HEALTH_CHECK_URL }}; then
+            echo "Health check passed"
+            exit 0
+          fi
+          echo "Health check attempt $i failed, retrying..."
+          sleep 10
+        done
+        echo "Health check failed after 30 attempts"
+        exit 1
+    
+    - name: Post-deployment verification
+      run: |
+        echo "Running post-deployment verification..."
+        # Add verification steps
+    
+    - name: Notify deployment
+      if: always()
+      run: |
+        echo "Production deployment completed"
+        # Add notification logic (Slack, email, etc.)
+    
+    - name: Rollback on failure
+      if: failure()
+      run: |
+        echo "Deployment failed, initiating rollback..."
+        # Add rollback logic
+        exit 1
+

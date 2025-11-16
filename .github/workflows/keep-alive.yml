@@ -1,0 +1,67 @@
+name: Keep Render Service Alive
+
+on:
+  schedule:
+    # Run every 5 minutes (12 times per hour)
+    # Cron format: minute hour day month day-of-week
+    # This runs at: 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55 minutes past each hour
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allow manual triggering from GitHub Actions tab
+
+jobs:
+  ping-service:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    
+    steps:
+      - name: Ping Render Service
+        run: |
+          echo "🔄 Pinging Render service to keep it alive..."
+          echo "⏰ Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          
+          # Get the service URL from GitHub secrets
+          SERVICE_URL="${{ secrets.RENDER_SERVICE_URL }}"
+          
+          if [ -z "$SERVICE_URL" ]; then
+            echo "❌ ERROR: RENDER_SERVICE_URL secret is not set!"
+            echo "Please add it in: Repository Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          
+          echo "🌐 Service URL: $SERVICE_URL"
+          
+          # Ping the health check endpoint (this wakes up the service)
+          echo "📡 Calling: $SERVICE_URL/api/health"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$SERVICE_URL/api/health" 2>&1 || echo "000")
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ SUCCESS! Service is alive and responding (HTTP $HTTP_CODE)"
+            exit 0
+          elif [ "$HTTP_CODE" = "000" ]; then
+            echo "⚠️  Service might be sleeping, trying to wake it up..."
+            # Try root endpoint as fallback
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$SERVICE_URL/" 2>&1 || echo "000")
+            if [ "$HTTP_CODE" != "000" ]; then
+              echo "✅ Service woke up! (HTTP $HTTP_CODE)"
+              exit 0
+            else
+              echo "❌ Service not responding (HTTP $HTTP_CODE)"
+              exit 1
+            fi
+          else
+            echo "⚠️  Service responded with HTTP $HTTP_CODE (might be starting up)"
+            exit 0
+          fi
+        env:
+          RENDER_SERVICE_URL: ${{ secrets.RENDER_SERVICE_URL }}
+      
+      - name: Ping Background Worker (Optional)
+        if: ${{ secrets.RENDER_WORKER_URL != '' }}
+        run: |
+          echo "🔧 Pinging background worker..."
+          WORKER_URL="${{ secrets.RENDER_WORKER_URL }}"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$WORKER_URL/api/health" 2>&1 || echo "000")
+          echo "Worker response: HTTP $HTTP_CODE"
+        env:
+          RENDER_WORKER_URL: ${{ secrets.RENDER_WORKER_URL }}
+

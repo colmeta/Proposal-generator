@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: proposal-generator-db
+    environment:
+      POSTGRES_DB: proposal_generator
+      POSTGRES_USER: proposal_user
+      POSTGRES_PASSWORD: proposal_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deployment/backup:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U proposal_user -d proposal_generator"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - proposal-network
+
+  # Redis (optional, for caching)
+  redis:
+    image: redis:7-alpine
+    container_name: proposal-generator-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - proposal-network
+
+  # Web Application
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: proposal-generator-web
+    command: gunicorn app:app --bind 0.0.0.0:8000 --workers 2 --threads 4 --timeout 120 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://proposal_user:proposal_password@db:5432/proposal_generator
+      - REDIS_URL=redis://redis:6379/0
+      - FLASK_ENV=development
+      - LOG_LEVEL=DEBUG
+      - ENABLE_JSON_LOGGING=false
+      - LOG_DIR=/app/logs
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - proposal-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/monitoring/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Background Worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: proposal-generator-worker
+    command: python -m workers.background_processor
+    environment:
+      - DATABASE_URL=postgresql://proposal_user:proposal_password@db:5432/proposal_generator
+      - REDIS_URL=redis://redis:6379/0
+      - FLASK_ENV=development
+      - LOG_LEVEL=DEBUG
+      - ENABLE_JSON_LOGGING=false
+      - LOG_DIR=/app/logs
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - proposal-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  proposal-network:
+    driver: bridge
+
