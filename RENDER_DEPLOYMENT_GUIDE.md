@@ -62,10 +62,9 @@ git push -u origin main
   ```bash
   python -m api.endpoints
   ```
-  OR if using gunicorn:
-  ```bash
-  gunicorn api.endpoints:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
-  ```
+  **Note**: This is the recommended command for free tier. It works perfectly and uses fewer resources.
+  
+  (Optional: If you want to use gunicorn instead, use: `gunicorn api.endpoints:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120`)
 
 #### Environment Variables:
 Add these in the **Environment** section:

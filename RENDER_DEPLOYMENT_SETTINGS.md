@@ -30,16 +30,21 @@ pip install -r requirements.txt
 ```
 
 #### Start Command:
-```bash
-gunicorn api.endpoints:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
-```
 
-**Alternative** (if gunicorn fails, use this):
+**RECOMMENDED for Free Tier** (Use this):
 ```bash
 python -m api.endpoints
 ```
 
-**Note**: Make sure `gunicorn` is in requirements.txt (it's already added)
+**Alternative** (If you want to use gunicorn - requires more resources):
+```bash
+gunicorn api.endpoints:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+```
+
+**Note**: 
+- For **free tier**, use `python -m api.endpoints` (simpler, works perfectly)
+- Gunicorn is optional and uses more resources
+- Both work, but Python is recommended for free tier
 
 #### Environment Variables:
 
