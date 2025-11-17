@@ -57,15 +57,30 @@ except Exception as e:
 
 try:
     from services.document_processor import document_processor
-    from services.website_scraper import website_scraper
-    from services.knowledge_base import knowledge_base
-    from services.knowledge_base_enhanced import EnhancedKnowledgeBase
-    logger.info("Services imported")
+    logger.info("Document processor imported")
 except Exception as e:
-    logger.error(f"Failed to import services: {e}")
+    logger.error(f"Failed to import document processor: {e}")
     document_processor = None
+
+try:
+    from services.website_scraper import website_scraper
+    logger.info("Website scraper imported")
+except Exception as e:
+    logger.error(f"Failed to import website scraper: {e}")
     website_scraper = None
+
+try:
+    from services.knowledge_base import knowledge_base
+    logger.info("Knowledge base imported")
+except Exception as e:
+    logger.error(f"Failed to import knowledge base: {e}")
     knowledge_base = None
+
+try:
+    from services.knowledge_base_enhanced import EnhancedKnowledgeBase
+    logger.info("Knowledge base enhanced imported")
+except Exception as e:
+    logger.error(f"Failed to import enhanced knowledge base: {e}")
     EnhancedKnowledgeBase = None
 
 # Use enhanced knowledge base
@@ -95,14 +110,15 @@ def _initialize_app():
     if _initialized:
         return
     
-    try:
-        init_db()
-        logger.info("Database initialized")
-    except Exception as e:
-        logger.warning(f"Database initialization warning: {e}")
+    if init_db:
+        try:
+            init_db()
+            logger.info("Database initialized")
+        except Exception as e:
+            logger.warning(f"Database initialization warning: {e}")
     
     # Start background processor (only if enabled)
-    if os.environ.get('BACKGROUND_PROCESSING_ENABLED', 'true').lower() == 'true':
+    if background_processor and os.environ.get('BACKGROUND_PROCESSING_ENABLED', 'true').lower() == 'true':
         try:
             background_processor.start()
             logger.info("Background processor started")
@@ -117,6 +133,7 @@ def _initialize_app():
 # This happens during module import, but with proper error handling
 try:
     if os.environ.get('PORT'):  # Running on Render/production
+        logger.info("Detected production environment, initializing...")
         _initialize_app()
 except Exception as e:
     logger.warning(f"Startup initialization skipped: {e}")
@@ -126,7 +143,10 @@ except Exception as e:
 def ensure_initialized():
     """Ensure app is initialized before handling requests (fallback)"""
     if not _initialized:
-        _initialize_app()
+        try:
+            _initialize_app()
+        except Exception as e:
+            logger.error(f"Initialization failed: {e}")
 
 
 @app.route('/api/health', methods=['GET'])
