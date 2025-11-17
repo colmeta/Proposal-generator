@@ -62,6 +62,7 @@ streamlit>=1.28.0
 streamlit-aggrid>=0.3.4
 streamlit-option-menu>=0.3.6
 plotly>=5.17.0
+gunicorn>=21.2.0
 
 # API Enhancements
 flask-limiter>=3.5.0

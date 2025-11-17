@@ -34,10 +34,12 @@ pip install -r requirements.txt
 gunicorn api.endpoints:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
 ```
 
-OR (if gunicorn not available):
+**Alternative** (if gunicorn fails, use this):
 ```bash
 python -m api.endpoints
 ```
+
+**Note**: Make sure `gunicorn` is in requirements.txt (it's already added)
 
 #### Environment Variables:
 
