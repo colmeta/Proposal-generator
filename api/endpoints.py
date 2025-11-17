@@ -910,13 +910,17 @@ if __name__ == '__main__':
     # Initialize database
     init_db()
     
-    # Start background processor
-    background_processor.start()
+    # Start background processor (only if enabled)
+    import os
+    if os.environ.get('BACKGROUND_PROCESSING_ENABLED', 'true').lower() == 'true':
+        try:
+            background_processor.start()
+        except Exception as e:
+            logger.warning(f"Background processor not started: {e}")
     
     # Get port from environment (Render sets PORT)
-    import os
     port = int(os.environ.get('PORT', 5000))
     
-    # Run Flask app
+    # Run Flask app - MUST bind to 0.0.0.0 and use PORT
     app.run(host='0.0.0.0', port=port, debug=False)
 
