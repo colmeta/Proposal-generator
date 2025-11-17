@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Create Flask app
 app = Flask(__name__)
+application = app  # Alias for WSGI servers like gunicorn
 CORS(app)  # Enable CORS for all routes
 
 # Initialize components
