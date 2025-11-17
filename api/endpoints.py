@@ -6,12 +6,17 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from typing import Dict, Any, Optional
 import logging
+import base64
+from werkzeug.utils import secure_filename
 
 from database.db import get_session, init_db
 from database.models import Job, Project
 from workers.task_worker import TaskWorker, execute_task_async
 from services.background_processor import background_processor
 from core.workflow_orchestrator import WorkflowOrchestrator
+from services.document_processor import document_processor
+from services.website_scraper import website_scraper
+from services.knowledge_base import knowledge_base
 
 logger = logging.getLogger(__name__)
 
@@ -272,6 +277,343 @@ def get_project_jobs(project_id: int):
     
     except Exception as e:
         logger.error(f"Error getting project jobs: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/documents/upload', methods=['POST'])
+def upload_document():
+    """
+    Upload and process a document (PDF, DOCX, images, text)
+    Extracts information and stores in knowledge base
+    
+    Accepts:
+    - file: File upload (multipart/form-data)
+    - OR document_data: Base64 encoded file with filename
+    - document_type: Type of document (project_report, team_profile, budget, etc.)
+    - user_id: User ID (optional)
+    """
+    try:
+        # Check if file is uploaded
+        if 'file' in request.files:
+            file = request.files['file']
+            if file.filename == '':
+                return jsonify({"error": "No file selected"}), 400
+            
+            filename = secure_filename(file.filename)
+            file_content = file.read()
+            file_type = filename.split('.')[-1].lower()
+        
+        # Check if base64 encoded data is provided
+        elif 'document_data' in request.json:
+            data = request.json
+            document_data = data.get('document_data')
+            filename = data.get('filename', 'document')
+            
+            try:
+                # Decode base64
+                file_content = base64.b64decode(document_data)
+                file_type = filename.split('.')[-1].lower() if '.' in filename else 'txt'
+            except Exception as e:
+                return jsonify({"error": f"Invalid base64 data: {e}"}), 400
+        
+        else:
+            return jsonify({"error": "No file or document_data provided"}), 400
+        
+        # Get document type
+        document_type = request.form.get('document_type') or request.json.get('document_type', 'general')
+        user_id = request.form.get('user_id') or request.json.get('user_id', 'default')
+        
+        # Process document
+        logger.info(f"Processing document: {filename} (type: {document_type})")
+        processed = document_processor.process_document(
+            file_content=file_content,
+            filename=filename,
+            file_type=file_type
+        )
+        
+        # Extract structured information
+        structured_info = document_processor.extract_structured_info(
+            text=processed['text'],
+            document_type=document_type
+        )
+        
+        # Store in knowledge base
+        knowledge_base.add_document(
+            document_id=f"{user_id}_{filename}",
+            content=processed['text'],
+            metadata={
+                "filename": filename,
+                "file_type": file_type,
+                "document_type": document_type,
+                "user_id": user_id,
+                "char_count": processed.get('char_count', 0),
+                "word_count": processed.get('word_count', 0),
+                "structured_info": structured_info
+            }
+        )
+        
+        return jsonify({
+            "status": "success",
+            "message": "Document processed and stored in knowledge base",
+            "document": {
+                "filename": filename,
+                "file_type": file_type,
+                "char_count": processed.get('char_count', 0),
+                "word_count": processed.get('word_count', 0),
+                "structured_info": structured_info
+            }
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error uploading document: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/documents/upload-urls', methods=['POST'])
+def upload_urls():
+    """
+    Scrape and process content from URLs (websites, social media)
+    Extracts information and stores in knowledge base
+    
+    Body:
+    {
+        "urls": ["https://example.com", "https://linkedin.com/company/..."],
+        "user_id": "user123",
+        "extract_structured": true
+    }
+    """
+    try:
+        data = request.json
+        urls = data.get('urls', [])
+        user_id = data.get('user_id', 'default')
+        extract_structured = data.get('extract_structured', True)
+        
+        if not urls:
+            return jsonify({"error": "No URLs provided"}), 400
+        
+        results = []
+        for url in urls:
+            try:
+                logger.info(f"Scraping URL: {url}")
+                scraped = website_scraper.scrape_url(url, extract_structured=extract_structured)
+                
+                if scraped.get('success'):
+                    # Store in knowledge base
+                    knowledge_base.add_document(
+                        document_id=f"{user_id}_{url}",
+                        content=scraped.get('text', ''),
+                        metadata={
+                            "url": url,
+                            "platform": scraped.get('platform', 'website'),
+                            "title": scraped.get('title'),
+                            "user_id": user_id,
+                            "structured_info": scraped.get('structured_info', {})
+                        }
+                    )
+                    
+                    results.append({
+                        "url": url,
+                        "status": "success",
+                        "platform": scraped.get('platform'),
+                        "title": scraped.get('title'),
+                        "text_length": len(scraped.get('text', ''))
+                    })
+                else:
+                    results.append({
+                        "url": url,
+                        "status": "error",
+                        "error": scraped.get('error', 'Unknown error')
+                    })
+            
+            except Exception as e:
+                logger.error(f"Error scraping {url}: {e}")
+                results.append({
+                    "url": url,
+                    "status": "error",
+                    "error": str(e)
+                })
+        
+        return jsonify({
+            "status": "success",
+            "message": f"Processed {len([r for r in results if r['status'] == 'success'])} URLs",
+            "results": results
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error processing URLs: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/proposals/generate-auto', methods=['POST'])
+def generate_proposal_auto():
+    """
+    Automatically generate proposal using knowledge base
+    Minimal user input required - system uses uploaded documents
+    
+    Body:
+    {
+        "funder_name": "National Science Foundation",
+        "funder_website": "https://www.nsf.gov" (optional),
+        "user_id": "user123",
+        "project_focus": "Education technology" (optional),
+        "budget_amount": 500000 (optional),
+        "additional_requirements": {} (optional)
+    }
+    """
+    try:
+        data = request.json
+        funder_name = data.get('funder_name')
+        user_id = data.get('user_id', 'default')
+        
+        if not funder_name:
+            return jsonify({"error": "funder_name is required"}), 400
+        
+        # Retrieve information from knowledge base
+        logger.info(f"Generating auto proposal for {funder_name} using knowledge base")
+        
+        # Search knowledge base for relevant information
+        query = f"projects activities team budget {data.get('project_focus', '')}"
+        kb_results = knowledge_base.search(
+            query=query,
+            n_results=10,
+            filter_metadata={"user_id": user_id} if user_id != "default" else None
+        )
+        
+        # Extract information from knowledge base
+        extracted_info = {
+            "projects": [],
+            "team": [],
+            "activities": [],
+            "budget": {},
+            "organizational_info": {}
+        }
+        
+        for result in kb_results:
+            metadata = result.get('metadata', {})
+            structured = metadata.get('structured_info', {})
+            
+            if 'projects' in structured:
+                extracted_info['projects'].extend(structured['projects'])
+            if 'team_members' in structured:
+                extracted_info['team'].extend(structured['team_members'])
+            if 'activities' in structured:
+                extracted_info['activities'].extend(structured['activities'])
+            if 'budget_items' in structured:
+                extracted_info['budget'].update(structured)
+        
+        # Research funder
+        from agents.research.funder_intelligence import FunderIntelligenceAgent
+        funder_agent = FunderIntelligenceAgent()
+        funder_info = funder_agent.research_funder(
+            funder_name=funder_name,
+            website=data.get('funder_website'),
+            deep_research=True
+        )
+        
+        # Create proposal generation job
+        job_data = {
+            "task_type": "generate_proposal_auto",
+            "input_data": {
+                "funder_name": funder_name,
+                "funder_info": funder_info,
+                "user_id": user_id,
+                "extracted_info": extracted_info,
+                "project_focus": data.get('project_focus'),
+                "budget_amount": data.get('budget_amount'),
+                "additional_requirements": data.get('additional_requirements', {})
+            }
+        }
+        
+        # Create job in database
+        db = get_session()
+        try:
+            job = Job(
+                task_type=job_data["task_type"],
+                status="pending",
+                result=None
+            )
+            db.add(job)
+            db.commit()
+            job_id = job.id
+            
+            # Execute in background
+            execute_task_async(job_id, job_data["input_data"])
+            
+            return jsonify({
+                "status": "success",
+                "message": "Proposal generation started",
+                "job_id": job_id,
+                "funder": funder_name,
+                "knowledge_base_used": len(kb_results) > 0,
+                "info_sources": len(kb_results)
+            }), 202
+        
+        finally:
+            db.close()
+    
+    except Exception as e:
+        logger.error(f"Error generating auto proposal: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/knowledge-base/search', methods=['POST'])
+def search_knowledge_base():
+    """
+    Search knowledge base for information
+    
+    Body:
+    {
+        "query": "search query",
+        "user_id": "user123",
+        "n_results": 10
+    }
+    """
+    try:
+        data = request.json
+        query = data.get('query')
+        user_id = data.get('user_id', 'default')
+        n_results = data.get('n_results', 10)
+        
+        if not query:
+            return jsonify({"error": "query is required"}), 400
+        
+        results = knowledge_base.search(
+            query=query,
+            n_results=n_results,
+            filter_metadata={"user_id": user_id} if user_id != "default" else None
+        )
+        
+        return jsonify({
+            "status": "success",
+            "query": query,
+            "results": results,
+            "count": len(results)
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error searching knowledge base: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/knowledge-base/documents', methods=['GET'])
+def list_knowledge_base_documents():
+    """
+    List all documents in knowledge base for a user
+    """
+    try:
+        user_id = request.args.get('user_id', 'default')
+        limit = int(request.args.get('limit', 50))
+        
+        # Get documents from knowledge base
+        # Note: This is a simplified version - actual implementation depends on ChromaDB API
+        return jsonify({
+            "status": "success",
+            "user_id": user_id,
+            "message": "Knowledge base documents listing"
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error listing documents: {e}")
         return jsonify({"error": str(e)}), 500
 
 
