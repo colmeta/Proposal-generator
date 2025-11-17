@@ -32,29 +32,50 @@ class ScreeningPassAgent(BaseAgent):
         self,
         proposal: Dict[str, Any],
         funder_info: Dict[str, Any],
-        requirements: Dict[str, Any]
+        requirements: Dict[str, Any],
+        opportunity_type: str = "funding"  # "funding", "contract", "compliance_audit"
     ) -> Dict[str, Any]:
         """
-        Screen proposal as funder would - identify rejection risks
+        Screen proposal/application as funder/contractor would - identify rejection risks
         
         Args:
-            proposal: The proposal document
-            requirements: Funder requirements and screening criteria
+            proposal: The proposal/application document
+            funder_info: Funder/contractor information
+            requirements: Requirements and screening criteria
+            opportunity_type: Type of opportunity - "funding", "contract", "compliance_audit"
         
         Returns:
             Screening result with pass/fail and fixes needed
         """
-        self.log_action("Screening proposal for funder screening process")
+        self.log_action(f"Screening {opportunity_type} application for screening process")
         
-        # Extract screening criteria
-        screening_criteria = self._extract_screening_criteria(funder_info, requirements)
+        # Extract screening criteria based on type
+        if opportunity_type == "contract":
+            screening_criteria = self._extract_contract_screening_criteria(funder_info, requirements)
+        elif opportunity_type == "compliance_audit":
+            screening_criteria = self._extract_compliance_screening_criteria(funder_info, requirements)
+        else:
+            screening_criteria = self._extract_screening_criteria(funder_info, requirements)
         
-        # Perform screening checks
-        screening_result = self._perform_screening(
-            proposal=proposal,
-            screening_criteria=screening_criteria,
-            funder_info=funder_info
-        )
+        # Perform screening checks based on type
+        if opportunity_type == "contract":
+            screening_result = self._perform_contract_screening(
+                proposal=proposal,
+                screening_criteria=screening_criteria,
+                funder_info=funder_info
+            )
+        elif opportunity_type == "compliance_audit":
+            screening_result = self._perform_compliance_screening(
+                proposal=proposal,
+                screening_criteria=screening_criteria,
+                funder_info=funder_info
+            )
+        else:
+            screening_result = self._perform_screening(
+                proposal=proposal,
+                screening_criteria=screening_criteria,
+                funder_info=funder_info
+            )
         
         # If failed, identify fixes
         if not screening_result["will_pass"]:
@@ -66,13 +87,15 @@ class ScreeningPassAgent(BaseAgent):
             screening_result["fixes_needed"] = fixes
             screening_result["can_fix"] = len([f for f in fixes if f.get("fixable")]) > 0
         
-        # Generate next steps
+        # Generate next steps based on type
         next_steps = self._generate_next_steps(
             screening_result=screening_result,
             funder_info=funder_info,
-            proposal=proposal
+            proposal=proposal,
+            opportunity_type=opportunity_type
         )
         screening_result["next_steps"] = next_steps
+        screening_result["opportunity_type"] = opportunity_type
         
         # Final decision
         if screening_result["will_pass"]:
@@ -90,7 +113,7 @@ class ScreeningPassAgent(BaseAgent):
         funder_info: Dict[str, Any],
         requirements: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Extract screening criteria from funder info"""
+        """Extract screening criteria from funder info (for funding opportunities)"""
         return {
             "eligibility": funder_info.get("eligibility_criteria", []),
             "required_sections": requirements.get("required_sections", []),
@@ -99,6 +122,45 @@ class ScreeningPassAgent(BaseAgent):
             "deadline": funder_info.get("deadlines", {}),
             "budget_limits": funder_info.get("funding_amounts", {}),
             "focus_areas": funder_info.get("focus_areas", []),
+            "exclusion_criteria": requirements.get("exclusion_criteria", [])
+        }
+    
+    def _extract_contract_screening_criteria(
+        self,
+        contractor_info: Dict[str, Any],
+        requirements: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Extract screening criteria for procurement contracts (government/NGO)"""
+        return {
+            "eligibility": contractor_info.get("eligibility_criteria", []),
+            "required_sections": requirements.get("required_sections", []),
+            "required_documents": requirements.get("required_documents", []),
+            "format_requirements": requirements.get("format_requirements", {}),
+            "deadline": contractor_info.get("deadlines", {}),
+            "contract_value_limits": contractor_info.get("contract_values", {}),
+            "technical_requirements": requirements.get("technical_requirements", []),
+            "qualification_requirements": requirements.get("qualification_requirements", {}),
+            "compliance_requirements": requirements.get("compliance_requirements", []),
+            "past_performance": requirements.get("past_performance_requirements", {}),
+            "financial_capacity": requirements.get("financial_capacity_requirements", {}),
+            "exclusion_criteria": requirements.get("exclusion_criteria", []),
+            "procurement_type": contractor_info.get("procurement_type", "general"),  # "government", "ngo", "international"
+            "certification_requirements": requirements.get("certification_requirements", [])
+        }
+    
+    def _extract_compliance_screening_criteria(
+        self,
+        auditor_info: Dict[str, Any],
+        requirements: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Extract screening criteria for compliance audits"""
+        return {
+            "compliance_standards": requirements.get("compliance_standards", []),  # ISO, GDPR, etc.
+            "required_documents": requirements.get("required_documents", []),
+            "certification_requirements": requirements.get("certification_requirements", []),
+            "regulatory_requirements": requirements.get("regulatory_requirements", []),
+            "audit_scope": requirements.get("audit_scope", {}),
+            "qualification_criteria": requirements.get("qualification_criteria", []),
             "exclusion_criteria": requirements.get("exclusion_criteria", [])
         }
     
@@ -503,34 +565,76 @@ Return ONLY valid JSON, no other text.
         
         # If passed screening
         if screening_result["will_pass"]:
-            next_steps.append({
-                "step": "Review proposal",
-                "description": "Review the proposal one final time before submission",
-                "priority": "high"
-            })
-            
-            # Check if video is recommended
-            if self._should_include_video(funder_info, proposal):
+            if opportunity_type == "contract":
                 next_steps.append({
-                    "step": "Create submission video",
-                    "description": "Create a 2-3 minute video explaining your project",
-                    "priority": "medium",
-                    "video_guidelines": self._get_video_guidelines(funder_info)
+                    "step": "Review contract proposal",
+                    "description": "Review the contract proposal one final time before submission",
+                    "priority": "high"
                 })
+                
+                # Contract-specific documents
+                contract_docs = self._get_contract_documents_needed(funder_info, proposal)
+                if contract_docs:
+                    next_steps.append({
+                        "step": "Prepare contract documents",
+                        "description": f"Prepare: {', '.join(contract_docs)}",
+                        "priority": "high",
+                        "documents": contract_docs
+                    })
+                
+                # Check for procurement-specific requirements
+                if funder_info.get("procurement_type") in ["government", "ngo", "international"]:
+                    next_steps.append({
+                        "step": "Verify procurement compliance",
+                        "description": "Ensure all procurement regulations are met",
+                        "priority": "critical"
+                    })
             
-            # Check for additional documents
-            additional_docs = self._get_additional_documents_needed(funder_info, proposal)
-            if additional_docs:
+            elif opportunity_type == "compliance_audit":
                 next_steps.append({
-                    "step": "Prepare additional documents",
-                    "description": f"Prepare: {', '.join(additional_docs)}",
-                    "priority": "high",
-                    "documents": additional_docs
+                    "step": "Review compliance application",
+                    "description": "Review the compliance audit application before submission",
+                    "priority": "high"
                 })
+                
+                compliance_docs = self._get_compliance_documents_needed(funder_info, proposal)
+                if compliance_docs:
+                    next_steps.append({
+                        "step": "Prepare compliance documents",
+                        "description": f"Prepare: {', '.join(compliance_docs)}",
+                        "priority": "high",
+                        "documents": compliance_docs
+                    })
+            
+            else:  # funding
+                next_steps.append({
+                    "step": "Review proposal",
+                    "description": "Review the proposal one final time before submission",
+                    "priority": "high"
+                })
+                
+                # Check if video is recommended
+                if self._should_include_video(funder_info, proposal):
+                    next_steps.append({
+                        "step": "Create submission video",
+                        "description": "Create a 2-3 minute video explaining your project",
+                        "priority": "medium",
+                        "video_guidelines": self._get_video_guidelines(funder_info)
+                    })
+                
+                # Check for additional documents
+                additional_docs = self._get_additional_documents_needed(funder_info, proposal)
+                if additional_docs:
+                    next_steps.append({
+                        "step": "Prepare additional documents",
+                        "description": f"Prepare: {', '.join(additional_docs)}",
+                        "priority": "high",
+                        "documents": additional_docs
+                    })
             
             next_steps.append({
-                "step": "Submit proposal",
-                "description": f"Submit before deadline: {funder_info.get('deadlines', {}).get('next_deadline', 'Check funder website')}",
+                "step": "Submit application",
+                "description": f"Submit before deadline: {funder_info.get('deadlines', {}).get('next_deadline', 'Check website')}",
                 "priority": "critical"
             })
         
@@ -623,6 +727,234 @@ Return ONLY valid JSON, no other text.
         ]
         
         for doc in common_docs:
+            if doc in required or doc.replace(" ", "_") in required:
+                if doc not in proposal_text:
+                    additional.append(doc)
+        
+        return additional
+    
+    def _check_technical_requirements(self, proposal: Dict[str, Any], requirements: List[str]) -> Dict[str, Any]:
+        """Check technical requirements for contracts"""
+        proposal_text = str(proposal.get("content", "")).lower()
+        missing = [req for req in requirements if req.lower() not in proposal_text]
+        
+        if missing:
+            return {
+                "passed": False,
+                "issue": f"Missing technical requirements: {', '.join(missing[:3])}",
+                "missing": missing
+            }
+        
+        return {"passed": True}
+    
+    def _check_qualification_requirements(self, proposal: Dict[str, Any], requirements: Dict[str, Any]) -> Dict[str, Any]:
+        """Check qualification requirements for contracts"""
+        proposal_text = str(proposal.get("content", "")).lower()
+        
+        # Check minimum experience, certifications, etc.
+        min_experience = requirements.get("minimum_experience_years")
+        if min_experience:
+            # Would need to extract experience from proposal
+            pass
+        
+        return {"passed": True}
+    
+    def _check_compliance_requirements(self, proposal: Dict[str, Any], requirements: List[str]) -> Dict[str, Any]:
+        """Check compliance requirements"""
+        proposal_text = str(proposal.get("content", "")).lower()
+        missing = [req for req in requirements if req.lower() not in proposal_text]
+        
+        if missing:
+            return {
+                "passed": False,
+                "issue": f"Missing compliance requirements: {', '.join(missing[:3])}",
+                "missing": missing
+            }
+        
+        return {"passed": True}
+    
+    def _check_past_performance(self, proposal: Dict[str, Any], requirements: Dict[str, Any]) -> Dict[str, Any]:
+        """Check past performance requirements"""
+        proposal_text = str(proposal.get("content", "")).lower()
+        
+        # Check for past project references
+        if "past performance" in requirements or "previous projects" in requirements:
+            if "project" not in proposal_text and "experience" not in proposal_text:
+                return {
+                    "passed": False,
+                    "issue": "Past performance information not provided"
+                }
+        
+        return {"passed": True}
+    
+    def _check_financial_capacity(self, proposal: Dict[str, Any], requirements: Dict[str, Any]) -> Dict[str, Any]:
+        """Check financial capacity requirements"""
+        proposal_text = str(proposal.get("content", "")).lower()
+        
+        # Check for financial statements, bank references
+        if "financial" not in proposal_text and "budget" not in proposal_text:
+            return {
+                "passed": False,
+                "issue": "Financial capacity information not provided"
+            }
+        
+        return {"passed": True}
+    
+    def _check_certification_requirements(self, proposal: Dict[str, Any], requirements: List[str]) -> Dict[str, Any]:
+        """Check certification requirements"""
+        proposal_text = str(proposal.get("content", "")).lower()
+        missing = [cert for cert in requirements if cert.lower() not in proposal_text]
+        
+        if missing:
+            return {
+                "passed": False,
+                "issue": f"Missing certifications: {', '.join(missing[:3])}",
+                "missing": missing
+            }
+        
+        return {"passed": True}
+    
+    def _check_compliance_standards(self, proposal: Dict[str, Any], standards: List[str]) -> Dict[str, Any]:
+        """Check compliance standards (ISO, GDPR, etc.)"""
+        proposal_text = str(proposal.get("content", "")).lower()
+        missing = [std for std in standards if std.lower() not in proposal_text]
+        
+        if missing:
+            return {
+                "passed": False,
+                "issue": f"Missing compliance standards: {', '.join(missing[:3])}",
+                "missing": missing
+            }
+        
+        return {"passed": True}
+    
+    def _check_regulatory_requirements(self, proposal: Dict[str, Any], requirements: List[str]) -> Dict[str, Any]:
+        """Check regulatory requirements"""
+        proposal_text = str(proposal.get("content", "")).lower()
+        missing = [req for req in requirements if req.lower() not in proposal_text]
+        
+        if missing:
+            return {
+                "passed": False,
+                "issue": f"Missing regulatory requirements: {', '.join(missing[:3])}",
+                "missing": missing
+            }
+        
+        return {"passed": True}
+    
+    def _llm_contract_screening_check(
+        self,
+        proposal: Dict[str, Any],
+        contractor_info: Dict[str, Any],
+        screening_criteria: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Use LLM to perform comprehensive contract screening"""
+        
+        prompt = f"""You are a procurement officer reviewing a contract proposal. Determine if it would PASS or FAIL the initial screening.
+
+CONTRACTOR: {contractor_info.get('name')}
+PROCUREMENT TYPE: {screening_criteria.get('procurement_type', 'general')}
+SCREENING CRITERIA:
+{json.dumps(screening_criteria, indent=2)}
+
+PROPOSAL:
+{json.dumps(proposal.get('content', {}), indent=2)[:5000]}
+
+As a procurement officer, check:
+1. Technical requirements met
+2. Qualification requirements met
+3. Compliance requirements met
+4. Past performance demonstrated
+5. Financial capacity proven
+6. Certifications provided
+7. Required documents included
+
+Return JSON:
+{{
+    "will_be_rejected": true/false,
+    "rejection_reason": "reason if rejected",
+    "screening_notes": "detailed screening notes",
+    "critical_issues": ["issue1", "issue2"],
+    "minor_issues": ["issue1", "issue2"],
+    "screening_decision": "PASS" or "REJECT",
+    "confidence": <0-10>
+}}
+
+Return ONLY valid JSON, no other text.
+"""
+        
+        try:
+            response = self.call_llm(
+                prompt,
+                provider=LLMProvider.ANTHROPIC,
+                temperature=0.2,
+                max_tokens=2000
+            )
+            
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+            else:
+                return json.loads(response)
+        
+        except Exception as e:
+            logger.error(f"LLM contract screening check failed: {e}")
+            return {
+                "will_be_rejected": False,
+                "screening_decision": "UNKNOWN",
+                "error": str(e)
+            }
+    
+    def _get_contract_documents_needed(
+        self,
+        contractor_info: Dict[str, Any],
+        proposal: Dict[str, Any]
+    ) -> List[str]:
+        """Get contract-specific documents needed"""
+        required = contractor_info.get("requirements", {}).get("required_documents", [])
+        proposal_text = str(proposal.get("content", "")).lower()
+        
+        contract_docs = [
+            "technical proposal",
+            "financial proposal",
+            "past performance references",
+            "company registration",
+            "tax clearance certificate",
+            "insurance certificates",
+            "quality certifications",
+            "environmental compliance",
+            "labor compliance"
+        ]
+        
+        additional = []
+        for doc in contract_docs:
+            if doc in required or doc.replace(" ", "_") in required:
+                if doc not in proposal_text:
+                    additional.append(doc)
+        
+        return additional
+    
+    def _get_compliance_documents_needed(
+        self,
+        auditor_info: Dict[str, Any],
+        proposal: Dict[str, Any]
+    ) -> List[str]:
+        """Get compliance audit documents needed"""
+        required = auditor_info.get("requirements", {}).get("required_documents", [])
+        proposal_text = str(proposal.get("content", "")).lower()
+        
+        compliance_docs = [
+            "compliance policy documents",
+            "audit reports",
+            "certification certificates",
+            "regulatory compliance proof",
+            "data protection documentation",
+            "quality management system",
+            "risk assessment reports"
+        ]
+        
+        additional = []
+        for doc in compliance_docs:
             if doc in required or doc.replace(" ", "_") in required:
                 if doc not in proposal_text:
                     additional.append(doc)

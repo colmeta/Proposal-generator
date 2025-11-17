@@ -710,7 +710,8 @@ def screen_proposal():
     Body:
     {
         "proposal": {...},  // Proposal document
-        "funder_name": "National Science Foundation",
+        "funder_name": "National Science Foundation" or "UN Procurement" or "World Bank",
+        "opportunity_type": "funding" or "contract" or "compliance_audit",
         "job_id": 123  // Optional: job ID if screening existing proposal
     }
     """
@@ -753,10 +754,14 @@ def screen_proposal():
         from agents.screening_pass_agent import ScreeningPassAgent
         screening_agent = ScreeningPassAgent()
         
+        # Get opportunity type
+        opportunity_type = data.get('opportunity_type', 'funding')  # "funding", "contract", "compliance_audit"
+        
         screening_result = screening_agent.screen_proposal(
             proposal=proposal,
             funder_info=funder_info,
-            requirements=funder_info.get("requirements", {})
+            requirements=funder_info.get("requirements", {}),
+            opportunity_type=opportunity_type
         )
         
         return jsonify({
