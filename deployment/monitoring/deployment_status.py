@@ -89,3 +89,4 @@ class DeploymentStatus:
         status = self.get_status()
         return status.get('health') == 'healthy' and status.get('status') == 'deployed'
 
+

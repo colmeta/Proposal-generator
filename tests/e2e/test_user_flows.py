@@ -247,3 +247,4 @@ class TestCollaborationFlow:
         # Should succeed
         assert response.status_code in [200, 201]
 
+

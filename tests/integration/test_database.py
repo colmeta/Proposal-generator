@@ -238,3 +238,4 @@ class TestDatabaseMigrations:
         migrated = mock_database.query('projects', {})
         # In real scenario, would verify all records migrated
 
+

@@ -231,3 +231,4 @@ class TestScalability:
         max_size = 10 * 1024 * 1024  # 10MB
         assert size < max_size, f"Memory usage {size} bytes exceeds {max_size} bytes"
 
+

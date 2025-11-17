@@ -359,3 +359,4 @@ def render_job_details(job_id: str):
         if st.button("🔄 Refresh Status"):
             st.rerun()
 
+

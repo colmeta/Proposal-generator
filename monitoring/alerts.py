@@ -312,3 +312,4 @@ def get_alert_manager() -> AlertManager:
         _alert_manager = AlertManager()
     return _alert_manager
 
+

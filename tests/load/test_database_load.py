@@ -300,3 +300,4 @@ class TestIndexEffectiveness:
         # Composite queries should be efficient
         assert query_time < 0.3, f"Composite query took {query_time}s, expected < 0.3s"
 
+

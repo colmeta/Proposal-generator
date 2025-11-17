@@ -75,3 +75,4 @@ services:
     ipAllowList: []  # Allow all IPs (configure as needed)
     postgresMajorVersion: 15
 
+

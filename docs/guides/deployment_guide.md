@@ -339,3 +339,4 @@ tail -f /var/log/postgresql/postgresql.log
 - Check [Integration Guide](integration_guide.md)
 - See [Troubleshooting Guide](../user_guide/troubleshooting.md)
 
+

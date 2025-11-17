@@ -195,3 +195,4 @@ def get_dashboard() -> MonitoringDashboard:
     """Get the monitoring dashboard instance"""
     return MonitoringDashboard()
 
+

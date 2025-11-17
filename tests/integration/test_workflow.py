@@ -197,3 +197,4 @@ class TestAPIWorkflow:
         if response.status_code == 200:
             assert 'id' in response.json() or 'data' in response.json()
 
+

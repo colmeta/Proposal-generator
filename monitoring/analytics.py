@@ -288,3 +288,4 @@ def track_activity(activity_type: str, component: str):
         return wrapper
     return decorator
 
+

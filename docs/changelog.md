@@ -141,3 +141,4 @@ See [CONTRIBUTING.md](contributing.md) for contribution guidelines.
 - [GitHub Repository](https://github.com/your-repo/proposal-generator)
 - [Issue Tracker](https://github.com/your-repo/proposal-generator/issues)
 
+

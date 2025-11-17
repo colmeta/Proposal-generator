@@ -96,3 +96,4 @@ pytest tests/test_web.py -v
 - All API keys are stored securely and never displayed in full
 - The interface is responsive and mobile-friendly
 
+

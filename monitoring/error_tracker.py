@@ -197,3 +197,4 @@ def track_error(component: str, context: Optional[Dict[str, Any]] = None):
         return wrapper
     return decorator
 
+

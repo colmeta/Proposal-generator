@@ -359,3 +359,4 @@ def render_document_comparison(document1_id: str, document2_id: str, api_client)
         except Exception as e:
             st.error(f"Download failed: {str(e)}")
 
+
