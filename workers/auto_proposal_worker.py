@@ -61,6 +61,18 @@ def generate_proposal_from_knowledge_base(input_data: Dict[str, Any]) -> Dict[st
         # Write proposal
         writer_result = writer.process(proposal_data)
         
+        # Data Science & Visualization - Create executive presentation
+        from agents.data_science.visualization_agent import DataVisualizationAgent
+        viz_agent = DataVisualizationAgent()
+        presentation = viz_agent.create_executive_presentation(
+            proposal_data={
+                **writer_result.get("proposal", {}),
+                **extracted_info
+            },
+            opportunity_type="funding",
+            presentation_style="executive"
+        )
+        
         # CEO review with screening pass
         final_approval = ceo.final_approval_with_screening(
             proposal=writer_result.get("proposal", {}),
@@ -75,6 +87,9 @@ def generate_proposal_from_knowledge_base(input_data: Dict[str, Any]) -> Dict[st
         return {
             "status": "success",
             "proposal": writer_result.get("proposal", {}),
+            "executive_presentation": presentation,
+            "visualizations": presentation.get("visualizations", []),
+            "data_insights": presentation.get("insights", []),
             "ceo_review": final_approval.get("ceo_review", {}),
             "screening_result": final_approval.get("screening_result", {}),
             "ready_for_submission": final_approval.get("ready_for_submission", False),

@@ -707,6 +707,46 @@ def check_eligibility():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/proposals/create-presentation', methods=['POST'])
+def create_presentation():
+    """
+    Create executive-level presentation with visualizations
+    
+    Body:
+    {
+        "proposal": {...},
+        "opportunity_type": "funding" or "contract" or "compliance",
+        "presentation_style": "executive" or "presidential" or "board"
+    }
+    """
+    try:
+        data = request.json
+        proposal = data.get('proposal', {})
+        opportunity_type = data.get('opportunity_type', 'funding')
+        presentation_style = data.get('presentation_style', 'executive')
+        
+        from agents.data_science.visualization_agent import DataVisualizationAgent
+        viz_agent = DataVisualizationAgent()
+        
+        presentation = viz_agent.create_executive_presentation(
+            proposal_data=proposal,
+            opportunity_type=opportunity_type,
+            presentation_style=presentation_style
+        )
+        
+        return jsonify({
+            "status": "success",
+            "presentation": presentation,
+            "visualizations": presentation.get("visualizations", []),
+            "narrative": presentation.get("narrative", ""),
+            "insights": presentation.get("insights", [])
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error creating presentation: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/proposals/screen', methods=['POST'])
 def screen_proposal():
     """
