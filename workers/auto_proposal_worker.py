@@ -61,21 +61,24 @@ def generate_proposal_from_knowledge_base(input_data: Dict[str, Any]) -> Dict[st
         # Write proposal
         writer_result = writer.process(proposal_data)
         
-        # CEO review
-        ceo_review = ceo.review_proposal(
+        # CEO review with screening pass
+        final_approval = ceo.final_approval_with_screening(
             proposal=writer_result.get("proposal", {}),
-            requirements=funder_info.get("requirements", {}),
-            research_data={"extracted_info": extracted_info}
+            funder_info=funder_info,
+            requirements=funder_info.get("requirements", {})
         )
         
-        if not ceo_review.get("approved"):
-            logger.warning(f"Proposal not approved: {ceo_review.get('feedback')}")
+        if not final_approval.get("approved"):
+            logger.warning(f"Proposal not approved: {final_approval.get('ceo_review', {}).get('feedback')}")
             # Still return proposal but with review feedback
         
         return {
             "status": "success",
             "proposal": writer_result.get("proposal", {}),
-            "ceo_review": ceo_review,
+            "ceo_review": final_approval.get("ceo_review", {}),
+            "screening_result": final_approval.get("screening_result", {}),
+            "ready_for_submission": final_approval.get("ready_for_submission", False),
+            "next_steps": final_approval.get("next_steps", []),
             "funder": funder_name,
             "knowledge_base_used": True
         }

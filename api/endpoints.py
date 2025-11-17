@@ -702,6 +702,75 @@ def check_eligibility():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/proposals/screen', methods=['POST'])
+def screen_proposal():
+    """
+    Screen proposal to ensure it passes funder screening before delivery
+    
+    Body:
+    {
+        "proposal": {...},  // Proposal document
+        "funder_name": "National Science Foundation",
+        "job_id": 123  // Optional: job ID if screening existing proposal
+    }
+    """
+    try:
+        data = request.json
+        proposal = data.get('proposal')
+        funder_name = data.get('funder_name')
+        job_id = data.get('job_id')
+        
+        # If job_id provided, get proposal from job
+        if job_id and not proposal:
+            db = get_session()
+            try:
+                job = db.query(Job).filter(Job.id == job_id).first()
+                if job and job.result:
+                    import json
+                    if isinstance(job.result, str):
+                        job_result = json.loads(job.result)
+                    else:
+                        job_result = job.result
+                    proposal = job_result.get("proposal", {})
+            finally:
+                db.close()
+        
+        if not proposal:
+            return jsonify({"error": "proposal is required"}), 400
+        
+        if not funder_name:
+            return jsonify({"error": "funder_name is required"}), 400
+        
+        # Get funder info
+        from agents.research.funder_intelligence import FunderIntelligenceAgent
+        funder_agent = FunderIntelligenceAgent()
+        funder_info = funder_agent.get_funder_info(funder_name)
+        
+        if not funder_info:
+            funder_info = funder_agent.research_funder(funder_name, deep_research=False)
+        
+        # Screen proposal
+        from agents.screening_pass_agent import ScreeningPassAgent
+        screening_agent = ScreeningPassAgent()
+        
+        screening_result = screening_agent.screen_proposal(
+            proposal=proposal,
+            funder_info=funder_info,
+            requirements=funder_info.get("requirements", {})
+        )
+        
+        return jsonify({
+            "status": "success",
+            "funder": funder_name,
+            "screening_result": screening_result,
+            "ready_for_submission": screening_result["will_pass"]
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error screening proposal: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/eligibility/compare', methods=['POST'])
 def compare_opportunities():
     """

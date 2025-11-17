@@ -436,6 +436,53 @@ Provide concrete, actionable improvements. Return as JSON array: ["improvement 1
             review["improvements"]
         )
     
+    def final_approval_with_screening(
+        self,
+        proposal: Dict[str, Any],
+        funder_info: Dict[str, Any],
+        requirements: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Final approval with screening pass check
+        
+        Args:
+            proposal: The proposal
+            funder_info: Funder information
+            requirements: Requirements
+        
+        Returns:
+            Final approval result with screening
+        """
+        # CEO review first
+        ceo_review = self.review_proposal(
+            proposal,
+            requirements,
+            {"funder_info": funder_info}
+        )
+        
+        # Then screening pass check
+        from agents.screening_pass_agent import ScreeningPassAgent
+        screening_agent = ScreeningPassAgent()
+        screening_result = screening_agent.screen_proposal(
+            proposal=proposal,
+            funder_info=funder_info,
+            requirements=requirements
+        )
+        
+        # Final decision
+        final_approved = (
+            ceo_review["approved"] and 
+            screening_result["will_pass"]
+        )
+        
+        return {
+            "approved": final_approved,
+            "ceo_review": ceo_review,
+            "screening_result": screening_result,
+            "ready_for_submission": final_approved,
+            "next_steps": screening_result.get("next_steps", [])
+        }
+    
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process input - CEO review"""
         return self.review_proposal(
