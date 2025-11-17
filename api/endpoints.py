@@ -906,21 +906,35 @@ def internal_error(error):
     return jsonify({"error": "Internal server error"}), 500
 
 
-if __name__ == '__main__':
-    # Initialize database
+# Initialize on module import (for Render)
+import os
+
+# Initialize database
+try:
     init_db()
-    
-    # Start background processor (only if enabled)
-    import os
-    if os.environ.get('BACKGROUND_PROCESSING_ENABLED', 'true').lower() == 'true':
-        try:
-            background_processor.start()
-        except Exception as e:
-            logger.warning(f"Background processor not started: {e}")
-    
+except Exception as e:
+    logger.warning(f"Database initialization warning: {e}")
+
+# Start background processor (only if enabled)
+if os.environ.get('BACKGROUND_PROCESSING_ENABLED', 'true').lower() == 'true':
+    try:
+        background_processor.start()
+    except Exception as e:
+        logger.warning(f"Background processor not started: {e}")
+
+if __name__ == '__main__':
     # Get port from environment (Render sets PORT)
     port = int(os.environ.get('PORT', 5000))
     
     # Run Flask app - MUST bind to 0.0.0.0 and use PORT
+    logger.info(f"Starting Flask app on 0.0.0.0:{port}")
     app.run(host='0.0.0.0', port=port, debug=False)
+else:
+    # When running as module (python -m api.endpoints), Render needs this
+    # Get port from environment
+    port = int(os.environ.get('PORT', 10000))
+    
+    # Start server directly
+    logger.info(f"Starting Flask app as module on 0.0.0.0:{port}")
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
