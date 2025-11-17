@@ -8,43 +8,125 @@ from typing import Dict, Any, Optional
 import logging
 import base64
 from werkzeug.utils import secure_filename
+import os
 
-from database.db import get_session, init_db
-from database.models import Job, Project
-from workers.task_worker import TaskWorker, execute_task_async
-from services.background_processor import background_processor
-from core.workflow_orchestrator import WorkflowOrchestrator
-from services.document_processor import document_processor
-from services.website_scraper import website_scraper
-from services.knowledge_base import knowledge_base
-from services.knowledge_base_enhanced import EnhancedKnowledgeBase
-
-# Use enhanced knowledge base
-enhanced_kb = EnhancedKnowledgeBase()
-
+# Setup logging first
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create Flask app
+# Create Flask app FIRST - before any other imports
 app = Flask(__name__)
 application = app  # Alias for WSGI servers like gunicorn
 CORS(app)  # Enable CORS for all routes
 
+logger.info("Flask app created successfully")
+
+# Now import other modules with error handling
+try:
+    from database.db import get_session, init_db
+    from database.models import Job, Project
+    logger.info("Database modules imported")
+except Exception as e:
+    logger.error(f"Failed to import database modules: {e}")
+    get_session = None
+    init_db = None
+    Job = None
+    Project = None
+
+try:
+    from workers.task_worker import TaskWorker, execute_task_async
+    logger.info("Task worker imported")
+except Exception as e:
+    logger.error(f"Failed to import task worker: {e}")
+    TaskWorker = None
+    execute_task_async = None
+
+try:
+    from services.background_processor import background_processor
+    logger.info("Background processor imported")
+except Exception as e:
+    logger.error(f"Failed to import background processor: {e}")
+    background_processor = None
+
+try:
+    from core.workflow_orchestrator import WorkflowOrchestrator
+    logger.info("Workflow orchestrator imported")
+except Exception as e:
+    logger.error(f"Failed to import workflow orchestrator: {e}")
+    WorkflowOrchestrator = None
+
+try:
+    from services.document_processor import document_processor
+    from services.website_scraper import website_scraper
+    from services.knowledge_base import knowledge_base
+    from services.knowledge_base_enhanced import EnhancedKnowledgeBase
+    logger.info("Services imported")
+except Exception as e:
+    logger.error(f"Failed to import services: {e}")
+    document_processor = None
+    website_scraper = None
+    knowledge_base = None
+    EnhancedKnowledgeBase = None
+
+# Use enhanced knowledge base
+try:
+    enhanced_kb = EnhancedKnowledgeBase() if EnhancedKnowledgeBase else None
+except Exception as e:
+    logger.error(f"Failed to create enhanced KB: {e}")
+    enhanced_kb = None
+
 # Initialize components
-orchestrator = WorkflowOrchestrator()
-task_worker = TaskWorker(orchestrator)
+try:
+    orchestrator = WorkflowOrchestrator() if WorkflowOrchestrator else None
+    task_worker = TaskWorker(orchestrator) if TaskWorker and orchestrator else None
+    logger.info("Components initialized")
+except Exception as e:
+    logger.error(f"Failed to initialize components: {e}")
+    orchestrator = None
+    task_worker = None
+
+# Track initialization status
+_initialized = False
 
 
-def initialize():
+def _initialize_app():
     """Initialize database and background processor"""
+    global _initialized
+    if _initialized:
+        return
+    
     try:
         init_db()
-        background_processor.start()
-        logger.info("API initialized")
+        logger.info("Database initialized")
     except Exception as e:
-        logger.error(f"Failed to initialize API: {e}")
+        logger.warning(f"Database initialization warning: {e}")
+    
+    # Start background processor (only if enabled)
+    if os.environ.get('BACKGROUND_PROCESSING_ENABLED', 'true').lower() == 'true':
+        try:
+            background_processor.start()
+            logger.info("Background processor started")
+        except Exception as e:
+            logger.warning(f"Background processor warning: {e}")
+    
+    _initialized = True
+    logger.info("API initialized successfully")
 
-# Initialize on module import
-initialize()
+
+# Initialize immediately when running under gunicorn
+# This happens during module import, but with proper error handling
+try:
+    if os.environ.get('PORT'):  # Running on Render/production
+        _initialize_app()
+except Exception as e:
+    logger.warning(f"Startup initialization skipped: {e}")
+
+
+@app.before_request
+def ensure_initialized():
+    """Ensure app is initialized before handling requests (fallback)"""
+    if not _initialized:
+        _initialize_app()
 
 
 @app.route('/api/health', methods=['GET'])
@@ -664,7 +746,7 @@ def check_eligibility():
         
         # Build user profile from knowledge base
         user_profile = {
-            "organization_type": "organization",  # Could be extracted from KB
+            "organization_type": "organization",
             "projects": [],
             "team": [],
             "budget": {},
@@ -755,7 +837,7 @@ def screen_proposal():
     
     Body:
     {
-        "proposal": {...},  // Proposal document
+        "proposal": {...},
         "funder_name": "National Science Foundation" or "UN Procurement" or "World Bank",
         "opportunity_type": "funding" or "contract" or "compliance_audit",
         "job_id": 123  // Optional: job ID if screening existing proposal
@@ -801,7 +883,7 @@ def screen_proposal():
         screening_agent = ScreeningPassAgent()
         
         # Get opportunity type
-        opportunity_type = data.get('opportunity_type', 'funding')  # "funding", "contract", "compliance_audit"
+        opportunity_type = data.get('opportunity_type', 'funding')
         
         screening_result = screening_agent.screen_proposal(
             proposal=proposal,
@@ -853,7 +935,7 @@ def compare_opportunities():
             funder_info = funder_agent.research_funder(
                 funder_name=opp.get('name'),
                 website=opp.get('website'),
-                deep_research=False  # Faster for comparison
+                deep_research=False
             )
             opportunities.append(funder_info)
         
@@ -907,54 +989,11 @@ def internal_error(error):
     return jsonify({"error": "Internal server error"}), 500
 
 
-# Initialize on module import (for Render) - but don't block
-import os
-
-# Lazy initialization - only when needed, not on import
-_initialized = False
-
-def _initialize_app():
-    """Initialize app components - called lazily"""
-    global _initialized
-    if _initialized:
-        return
-    
-    try:
-        # Initialize database
-        init_db()
-        logger.info("Database initialized")
-    except Exception as e:
-        logger.warning(f"Database initialization warning: {e}")
-    
-    # Start background processor (only if enabled)
-    if os.environ.get('BACKGROUND_PROCESSING_ENABLED', 'true').lower() == 'true':
-        try:
-            background_processor.start()
-            logger.info("Background processor started")
-        except Exception as e:
-            logger.warning(f"Background processor not started: {e}")
-    
-    _initialized = True
-
-# Initialize when app starts (for gunicorn)
-# Use @app.before_request for newer Flask versions, or initialize directly
-try:
-    # Try to initialize immediately (non-blocking)
-    _initialize_app()
-except Exception as e:
-    logger.warning(f"Initial initialization failed: {e}")
-
-# For gunicorn, also initialize on first request as fallback
-@app.before_request
-def ensure_initialized():
-    """Ensure app is initialized before handling requests"""
-    if not _initialized:
-        _initialize_app()
-
+# Entry point for direct execution
 if __name__ == '__main__':
-    # Direct execution - initialize and run
+    # Initialize app when running directly
     _initialize_app()
+    
     port = int(os.environ.get('PORT', 5000))
     logger.info(f"Starting Flask app on 0.0.0.0:{port}")
     app.run(host='0.0.0.0', port=port, debug=False)
-
