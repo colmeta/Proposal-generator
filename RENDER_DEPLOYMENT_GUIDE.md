@@ -60,9 +60,9 @@ git push -u origin main
   ```
 - **Start Command**: 
   ```bash
-  python -m api.endpoints
+  python run.py
   ```
-  **Note**: This is the recommended command for free tier. It works perfectly and uses fewer resources.
+  **Note**: This is the recommended command for free tier. It ensures proper port binding and works perfectly.
   
   (Optional: If you want to use gunicorn instead, use: `gunicorn api.endpoints:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120`)
 

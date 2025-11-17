@@ -33,6 +33,11 @@ pip install -r requirements.txt
 
 **RECOMMENDED for Free Tier** (Use this):
 ```bash
+python run.py
+```
+
+**Alternative** (also works):
+```bash
 python -m api.endpoints
 ```
 

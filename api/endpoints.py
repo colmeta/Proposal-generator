@@ -908,10 +908,12 @@ def internal_error(error):
 
 # Initialize on module import (for Render)
 import os
+import threading
 
 # Initialize database
 try:
     init_db()
+    logger.info("Database initialized")
 except Exception as e:
     logger.warning(f"Database initialization warning: {e}")
 
@@ -919,22 +921,35 @@ except Exception as e:
 if os.environ.get('BACKGROUND_PROCESSING_ENABLED', 'true').lower() == 'true':
     try:
         background_processor.start()
+        logger.info("Background processor started")
     except Exception as e:
         logger.warning(f"Background processor not started: {e}")
 
-if __name__ == '__main__':
-    # Get port from environment (Render sets PORT)
-    port = int(os.environ.get('PORT', 5000))
-    
-    # Run Flask app - MUST bind to 0.0.0.0 and use PORT
-    logger.info(f"Starting Flask app on 0.0.0.0:{port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
-else:
-    # When running as module (python -m api.endpoints), Render needs this
-    # Get port from environment
+def start_server():
+    """Start Flask server - works for both direct run and module import"""
+    import os
     port = int(os.environ.get('PORT', 10000))
+    host = '0.0.0.0'
     
-    # Start server directly
-    logger.info(f"Starting Flask app as module on 0.0.0.0:{port}")
-    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+    logger.info(f"Starting Flask app on {host}:{port}")
+    logger.info(f"PORT environment variable: {os.environ.get('PORT', 'NOT SET')}")
+    
+    try:
+        app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
+    except Exception as e:
+        logger.error(f"Failed to start Flask app: {e}")
+        raise
+
+if __name__ == '__main__':
+    # Direct execution
+    start_server()
+else:
+    # Module import - start in a thread to avoid blocking
+    # This ensures the app starts when run as: python -m api.endpoints
+    import sys
+    if 'gunicorn' not in sys.modules and 'uwsgi' not in sys.modules:
+        # Only auto-start if not using a WSGI server
+        server_thread = threading.Thread(target=start_server, daemon=False)
+        server_thread.start()
+        logger.info("Flask server started in background thread")
 
