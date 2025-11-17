@@ -617,6 +617,163 @@ def list_knowledge_base_documents():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/eligibility/check', methods=['POST'])
+def check_eligibility():
+    """
+    Check if user qualifies for a funding opportunity/contract/loan
+    
+    Body:
+    {
+        "funder_name": "National Science Foundation",
+        "funder_website": "https://www.nsf.gov" (optional),
+        "user_id": "user123",
+        "opportunity_type": "grant"  // "grant", "contract", "loan"
+    }
+    """
+    try:
+        data = request.json
+        funder_name = data.get('funder_name')
+        user_id = data.get('user_id', 'default')
+        opportunity_type = data.get('opportunity_type', 'grant')
+        
+        if not funder_name:
+            return jsonify({"error": "funder_name is required"}), 400
+        
+        # Research funder
+        from agents.research.funder_intelligence import FunderIntelligenceAgent
+        funder_agent = FunderIntelligenceAgent()
+        funder_info = funder_agent.research_funder(
+            funder_name=funder_name,
+            website=data.get('funder_website'),
+            deep_research=True
+        )
+        
+        # Get user profile from knowledge base
+        user_profile_query = "organization profile team projects budget experience"
+        kb_results = knowledge_base.search(
+            query=user_profile_query,
+            n_results=10,
+            filter_metadata={"user_id": user_id} if user_id != "default" else None
+        )
+        
+        # Build user profile from knowledge base
+        user_profile = {
+            "organization_type": "organization",  # Could be extracted from KB
+            "projects": [],
+            "team": [],
+            "budget": {},
+            "experience": [],
+            "focus_areas": []
+        }
+        
+        knowledge_base_data = {}
+        for result in kb_results:
+            metadata = result.get('metadata', {})
+            structured = metadata.get('structured_info', {})
+            
+            if 'projects' in structured:
+                user_profile['projects'].extend(structured['projects'])
+            if 'team_members' in structured:
+                user_profile['team'].extend(structured['team_members'])
+            if 'budget_items' in structured:
+                user_profile['budget'].update(structured)
+            if 'activities' in structured:
+                user_profile['experience'].extend(structured.get('activities', []))
+        
+        # Assess eligibility
+        from agents.eligibility_assessor import EligibilityAssessorAgent
+        assessor = EligibilityAssessorAgent()
+        
+        assessment = assessor.assess_eligibility(
+            funder_info=funder_info,
+            user_profile=user_profile,
+            knowledge_base_data=knowledge_base_data
+        )
+        
+        return jsonify({
+            "status": "success",
+            "funder": funder_name,
+            "opportunity_type": opportunity_type,
+            "assessment": assessment
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error checking eligibility: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/eligibility/compare', methods=['POST'])
+def compare_opportunities():
+    """
+    Compare multiple funding opportunities and rank by eligibility
+    
+    Body:
+    {
+        "opportunities": [
+            {"name": "NSF", "website": "https://www.nsf.gov"},
+            {"name": "NIH", "website": "https://www.nih.gov"}
+        ],
+        "user_id": "user123"
+    }
+    """
+    try:
+        data = request.json
+        opportunities_data = data.get('opportunities', [])
+        user_id = data.get('user_id', 'default')
+        
+        if not opportunities_data:
+            return jsonify({"error": "opportunities list is required"}), 400
+        
+        # Research all opportunities
+        from agents.research.funder_intelligence import FunderIntelligenceAgent
+        funder_agent = FunderIntelligenceAgent()
+        
+        opportunities = []
+        for opp in opportunities_data:
+            funder_info = funder_agent.research_funder(
+                funder_name=opp.get('name'),
+                website=opp.get('website'),
+                deep_research=False  # Faster for comparison
+            )
+            opportunities.append(funder_info)
+        
+        # Get user profile
+        user_profile_query = "organization profile team projects"
+        kb_results = knowledge_base.search(
+            query=user_profile_query,
+            n_results=5,
+            filter_metadata={"user_id": user_id} if user_id != "default" else None
+        )
+        
+        user_profile = {"projects": [], "team": [], "budget": {}}
+        for result in kb_results:
+            structured = result.get('metadata', {}).get('structured_info', {})
+            if 'projects' in structured:
+                user_profile['projects'].extend(structured['projects'])
+            if 'team_members' in structured:
+                user_profile['team'].extend(structured['team_members'])
+        
+        # Compare opportunities
+        from agents.eligibility_assessor import EligibilityAssessorAgent
+        assessor = EligibilityAssessorAgent()
+        
+        comparison = assessor.compare_opportunities(
+            opportunities=opportunities,
+            user_profile=user_profile
+        )
+        
+        return jsonify({
+            "status": "success",
+            "user_id": user_id,
+            "comparison": comparison,
+            "top_opportunity": comparison[0] if comparison else None
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error comparing opportunities: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors"""
