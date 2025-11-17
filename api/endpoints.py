@@ -907,50 +907,54 @@ def internal_error(error):
     return jsonify({"error": "Internal server error"}), 500
 
 
-# Initialize on module import (for Render)
+# Initialize on module import (for Render) - but don't block
 import os
-import threading
 
-# Initialize database
+# Lazy initialization - only when needed, not on import
+_initialized = False
+
+def _initialize_app():
+    """Initialize app components - called lazily"""
+    global _initialized
+    if _initialized:
+        return
+    
+    try:
+        # Initialize database
+        init_db()
+        logger.info("Database initialized")
+    except Exception as e:
+        logger.warning(f"Database initialization warning: {e}")
+    
+    # Start background processor (only if enabled)
+    if os.environ.get('BACKGROUND_PROCESSING_ENABLED', 'true').lower() == 'true':
+        try:
+            background_processor.start()
+            logger.info("Background processor started")
+        except Exception as e:
+            logger.warning(f"Background processor not started: {e}")
+    
+    _initialized = True
+
+# Initialize when app starts (for gunicorn)
+# Use @app.before_request for newer Flask versions, or initialize directly
 try:
-    init_db()
-    logger.info("Database initialized")
+    # Try to initialize immediately (non-blocking)
+    _initialize_app()
 except Exception as e:
-    logger.warning(f"Database initialization warning: {e}")
+    logger.warning(f"Initial initialization failed: {e}")
 
-# Start background processor (only if enabled)
-if os.environ.get('BACKGROUND_PROCESSING_ENABLED', 'true').lower() == 'true':
-    try:
-        background_processor.start()
-        logger.info("Background processor started")
-    except Exception as e:
-        logger.warning(f"Background processor not started: {e}")
-
-def start_server():
-    """Start Flask server - works for both direct run and module import"""
-    import os
-    port = int(os.environ.get('PORT', 10000))
-    host = '0.0.0.0'
-    
-    logger.info(f"Starting Flask app on {host}:{port}")
-    logger.info(f"PORT environment variable: {os.environ.get('PORT', 'NOT SET')}")
-    
-    try:
-        app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
-    except Exception as e:
-        logger.error(f"Failed to start Flask app: {e}")
-        raise
+# For gunicorn, also initialize on first request as fallback
+@app.before_request
+def ensure_initialized():
+    """Ensure app is initialized before handling requests"""
+    if not _initialized:
+        _initialize_app()
 
 if __name__ == '__main__':
-    # Direct execution
-    start_server()
-else:
-    # Module import - start in a thread to avoid blocking
-    # This ensures the app starts when run as: python -m api.endpoints
-    import sys
-    if 'gunicorn' not in sys.modules and 'uwsgi' not in sys.modules:
-        # Only auto-start if not using a WSGI server
-        server_thread = threading.Thread(target=start_server, daemon=False)
-        server_thread.start()
-        logger.info("Flask server started in background thread")
+    # Direct execution - initialize and run
+    _initialize_app()
+    port = int(os.environ.get('PORT', 5000))
+    logger.info(f"Starting Flask app on 0.0.0.0:{port}")
+    app.run(host='0.0.0.0', port=port, debug=False)
 
