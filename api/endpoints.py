@@ -17,6 +17,10 @@ from core.workflow_orchestrator import WorkflowOrchestrator
 from services.document_processor import document_processor
 from services.website_scraper import website_scraper
 from services.knowledge_base import knowledge_base
+from services.knowledge_base_enhanced import EnhancedKnowledgeBase
+
+# Use enhanced knowledge base
+enhanced_kb = EnhancedKnowledgeBase()
 
 logger = logging.getLogger(__name__)
 
@@ -337,9 +341,8 @@ def upload_document():
             document_type=document_type
         )
         
-        # Store in knowledge base
-        knowledge_base.add_document(
-            document_id=f"{user_id}_{filename}",
+        # Store in enhanced knowledge base with cross-silo indexing
+        enhanced_kb.add_cross_silo_document(
             content=processed['text'],
             metadata={
                 "filename": filename,
@@ -349,7 +352,9 @@ def upload_document():
                 "char_count": processed.get('char_count', 0),
                 "word_count": processed.get('word_count', 0),
                 "structured_info": structured_info
-            }
+            },
+            document_id=f"{user_id}_{filename}",
+            silo_type=document_type
         )
         
         return jsonify({
