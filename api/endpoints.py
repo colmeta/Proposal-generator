@@ -33,13 +33,21 @@ except Exception as e:
     Job = None
     Project = None
 
-try:
-    from workers.task_worker import TaskWorker, execute_task_async
-    logger.info("Task worker imported")
-except Exception as e:
-    logger.error(f"Failed to import task worker: {e}")
-    TaskWorker = None
-    execute_task_async = None
+# Skip TaskWorker import for now - it's causing the hang
+# We'll load it lazily when needed
+logger.info("Skipping TaskWorker import (will load lazily if needed)")
+TaskWorker = None
+execute_task_async = None
+
+# Uncomment below to re-enable TaskWorker import once the issue is fixed:
+# try:
+#     logger.info("Attempting to import TaskWorker...")
+#     from workers.task_worker import TaskWorker, execute_task_async
+#     logger.info("Task worker imported successfully")
+# except Exception as e:
+#     logger.error(f"Failed to import task worker: {e}", exc_info=True)
+#     TaskWorker = None
+#     execute_task_async = None
 
 try:
     from services.background_processor import background_processor
@@ -85,18 +93,38 @@ except Exception as e:
 
 # Use enhanced knowledge base
 try:
-    enhanced_kb = EnhancedKnowledgeBase() if EnhancedKnowledgeBase else None
+    if EnhancedKnowledgeBase:
+        logger.info("Creating enhanced knowledge base instance...")
+        enhanced_kb = EnhancedKnowledgeBase()
+        logger.info("Enhanced knowledge base created")
+    else:
+        enhanced_kb = None
+        logger.warning("EnhancedKnowledgeBase not available")
 except Exception as e:
-    logger.error(f"Failed to create enhanced KB: {e}")
+    logger.error(f"Failed to create enhanced KB: {e}", exc_info=True)
     enhanced_kb = None
 
 # Initialize components
 try:
-    orchestrator = WorkflowOrchestrator() if WorkflowOrchestrator else None
-    task_worker = TaskWorker(orchestrator) if TaskWorker and orchestrator else None
-    logger.info("Components initialized")
+    if WorkflowOrchestrator:
+        logger.info("Creating workflow orchestrator...")
+        orchestrator = WorkflowOrchestrator()
+        logger.info("Workflow orchestrator created")
+    else:
+        orchestrator = None
+        logger.warning("WorkflowOrchestrator not available")
+        
+    if TaskWorker and orchestrator:
+        logger.info("Creating task worker...")
+        task_worker = TaskWorker(orchestrator)
+        logger.info("Task worker created")
+    else:
+        task_worker = None
+        logger.warning("TaskWorker not available")
+        
+    logger.info("All components initialized successfully")
 except Exception as e:
-    logger.error(f"Failed to initialize components: {e}")
+    logger.error(f"Failed to initialize components: {e}", exc_info=True)
     orchestrator = None
     task_worker = None
 
@@ -110,33 +138,33 @@ def _initialize_app():
     if _initialized:
         return
     
+    logger.info("Starting app initialization...")
+    
     if init_db:
         try:
+            logger.info("Initializing database...")
             init_db()
-            logger.info("Database initialized")
+            logger.info("Database initialized successfully")
         except Exception as e:
-            logger.warning(f"Database initialization warning: {e}")
+            logger.warning(f"Database initialization warning: {e}", exc_info=True)
     
     # Start background processor (only if enabled)
-    if background_processor and os.environ.get('BACKGROUND_PROCESSING_ENABLED', 'true').lower() == 'true':
+    if background_processor and os.environ.get('BACKGROUND_PROCESSING_ENABLED', 'false').lower() == 'true':
         try:
+            logger.info("Starting background processor...")
             background_processor.start()
-            logger.info("Background processor started")
+            logger.info("Background processor started successfully")
         except Exception as e:
-            logger.warning(f"Background processor warning: {e}")
+            logger.warning(f"Background processor warning: {e}", exc_info=True)
+    else:
+        logger.info("Background processing disabled")
     
     _initialized = True
     logger.info("API initialized successfully")
 
 
-# Initialize immediately when running under gunicorn
-# This happens during module import, but with proper error handling
-try:
-    if os.environ.get('PORT'):  # Running on Render/production
-        logger.info("Detected production environment, initializing...")
-        _initialize_app()
-except Exception as e:
-    logger.warning(f"Startup initialization skipped: {e}")
+# DON'T initialize immediately - let Flask start first
+logger.info("Module loaded, waiting for first request to initialize...")
 
 
 @app.before_request
@@ -144,9 +172,10 @@ def ensure_initialized():
     """Ensure app is initialized before handling requests (fallback)"""
     if not _initialized:
         try:
+            logger.info("Initializing on first request...")
             _initialize_app()
         except Exception as e:
-            logger.error(f"Initialization failed: {e}")
+            logger.error(f"Initialization failed: {e}", exc_info=True)
 
 
 @app.route('/api/health', methods=['GET'])
