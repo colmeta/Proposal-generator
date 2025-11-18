@@ -4,10 +4,7 @@ Flask REST API endpoints for job management
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from typing import Dict, Any, Optional
 import logging
-import base64
-from werkzeug.utils import secure_filename
 import os
 
 # Setup logging first
@@ -21,184 +18,181 @@ CORS(app)  # Enable CORS for all routes
 
 logger.info("Flask app created successfully")
 
-# Now import other modules with error handling
-try:
-    from database.db import get_session, init_db
-    from database.models import Job, Project
-    logger.info("Database modules imported")
-except Exception as e:
-    logger.error(f"Failed to import database modules: {e}")
-    get_session = None
-    init_db = None
-    Job = None
-    Project = None
+# Lazy-loaded modules - will be imported only when needed
+_db_module = None
+_background_processor = None
+_orchestrator = None
+_document_processor = None
+_website_scraper = None
+_knowledge_base = None
+_enhanced_kb = None
 
-# Skip TaskWorker import for now - it's causing the hang
-# We'll load it lazily when needed
-logger.info("Skipping TaskWorker import (will load lazily if needed)")
-TaskWorker = None
-execute_task_async = None
+def get_db_module():
+    """Lazy load database module"""
+    global _db_module
+    if _db_module is None:
+        try:
+            from database import db, models
+            _db_module = {'db': db, 'models': models}
+            logger.info("Database modules loaded")
+        except Exception as e:
+            logger.error(f"Failed to load database modules: {e}")
+            _db_module = {}
+    return _db_module
 
-# Uncomment below to re-enable TaskWorker import once the issue is fixed:
-# try:
-#     logger.info("Attempting to import TaskWorker...")
-#     from workers.task_worker import TaskWorker, execute_task_async
-#     logger.info("Task worker imported successfully")
-# except Exception as e:
-#     logger.error(f"Failed to import task worker: {e}", exc_info=True)
-#     TaskWorker = None
-#     execute_task_async = None
+def get_background_processor():
+    """Lazy load background processor"""
+    global _background_processor
+    if _background_processor is None:
+        try:
+            from services.background_processor import background_processor
+            _background_processor = background_processor
+            logger.info("Background processor loaded")
+        except Exception as e:
+            logger.error(f"Failed to load background processor: {e}")
+    return _background_processor
 
-try:
-    from services.background_processor import background_processor
-    logger.info("Background processor imported")
-except Exception as e:
-    logger.error(f"Failed to import background processor: {e}")
-    background_processor = None
+def get_orchestrator():
+    """Lazy load orchestrator"""
+    global _orchestrator
+    if _orchestrator is None:
+        try:
+            from core.workflow_orchestrator import WorkflowOrchestrator
+            _orchestrator = WorkflowOrchestrator()
+            logger.info("Orchestrator loaded")
+        except Exception as e:
+            logger.error(f"Failed to load orchestrator: {e}")
+    return _orchestrator
 
-try:
-    from core.workflow_orchestrator import WorkflowOrchestrator
-    logger.info("Workflow orchestrator imported")
-except Exception as e:
-    logger.error(f"Failed to import workflow orchestrator: {e}")
-    WorkflowOrchestrator = None
+def get_document_processor():
+    """Lazy load document processor"""
+    global _document_processor
+    if _document_processor is None:
+        try:
+            from services.document_processor import document_processor
+            _document_processor = document_processor
+            logger.info("Document processor loaded")
+        except Exception as e:
+            logger.error(f"Failed to load document processor: {e}")
+    return _document_processor
 
-try:
-    from services.document_processor import document_processor
-    logger.info("Document processor imported")
-except Exception as e:
-    logger.error(f"Failed to import document processor: {e}")
-    document_processor = None
+def get_website_scraper():
+    """Lazy load website scraper"""
+    global _website_scraper
+    if _website_scraper is None:
+        try:
+            from services.website_scraper import website_scraper
+            _website_scraper = website_scraper
+            logger.info("Website scraper loaded")
+        except Exception as e:
+            logger.error(f"Failed to load website scraper: {e}")
+    return _website_scraper
 
-try:
-    from services.website_scraper import website_scraper
-    logger.info("Website scraper imported")
-except Exception as e:
-    logger.error(f"Failed to import website scraper: {e}")
-    website_scraper = None
+def get_knowledge_base():
+    """Lazy load knowledge base"""
+    global _knowledge_base
+    if _knowledge_base is None:
+        try:
+            from services.knowledge_base import knowledge_base
+            _knowledge_base = knowledge_base
+            logger.info("Knowledge base loaded")
+        except Exception as e:
+            logger.error(f"Failed to load knowledge base: {e}")
+    return _knowledge_base
 
-try:
-    from services.knowledge_base import knowledge_base
-    logger.info("Knowledge base imported")
-except Exception as e:
-    logger.error(f"Failed to import knowledge base: {e}")
-    knowledge_base = None
-
-try:
-    from services.knowledge_base_enhanced import EnhancedKnowledgeBase
-    logger.info("Knowledge base enhanced imported")
-except Exception as e:
-    logger.error(f"Failed to import enhanced knowledge base: {e}")
-    EnhancedKnowledgeBase = None
-
-# Use enhanced knowledge base
-try:
-    if EnhancedKnowledgeBase:
-        logger.info("Creating enhanced knowledge base instance...")
-        enhanced_kb = EnhancedKnowledgeBase()
-        logger.info("Enhanced knowledge base created")
-    else:
-        enhanced_kb = None
-        logger.warning("EnhancedKnowledgeBase not available")
-except Exception as e:
-    logger.error(f"Failed to create enhanced KB: {e}", exc_info=True)
-    enhanced_kb = None
-
-# Initialize components
-try:
-    if WorkflowOrchestrator:
-        logger.info("Creating workflow orchestrator...")
-        orchestrator = WorkflowOrchestrator()
-        logger.info("Workflow orchestrator created")
-    else:
-        orchestrator = None
-        logger.warning("WorkflowOrchestrator not available")
-        
-    if TaskWorker and orchestrator:
-        logger.info("Creating task worker...")
-        task_worker = TaskWorker(orchestrator)
-        logger.info("Task worker created")
-    else:
-        task_worker = None
-        logger.warning("TaskWorker not available")
-        
-    logger.info("All components initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize components: {e}", exc_info=True)
-    orchestrator = None
-    task_worker = None
+def get_enhanced_kb():
+    """Lazy load enhanced knowledge base"""
+    global _enhanced_kb
+    if _enhanced_kb is None:
+        try:
+            from services.knowledge_base_enhanced import EnhancedKnowledgeBase
+            _enhanced_kb = EnhancedKnowledgeBase()
+            logger.info("Enhanced knowledge base loaded")
+        except Exception as e:
+            logger.error(f"Failed to load enhanced knowledge base: {e}")
+    return _enhanced_kb
 
 # Track initialization status
 _initialized = False
 
-
 def _initialize_app():
-    """Initialize database and background processor"""
+    """Initialize database only - skip background processor for now"""
     global _initialized
     if _initialized:
         return
     
-    logger.info("Starting app initialization...")
+    logger.info("Starting lightweight app initialization...")
     
-    if init_db:
-        try:
-            logger.info("Initializing database...")
-            init_db()
-            logger.info("Database initialized successfully")
-        except Exception as e:
-            logger.warning(f"Database initialization warning: {e}", exc_info=True)
+    try:
+        db_module = get_db_module()
+        if db_module and 'db' in db_module:
+            init_db = getattr(db_module['db'], 'init_db', None)
+            if init_db:
+                logger.info("Initializing database...")
+                init_db()
+                logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.warning(f"Database initialization warning: {e}")
     
-    # Start background processor (only if enabled)
-    if background_processor and os.environ.get('BACKGROUND_PROCESSING_ENABLED', 'false').lower() == 'true':
-        try:
-            logger.info("Starting background processor...")
-            background_processor.start()
-            logger.info("Background processor started successfully")
-        except Exception as e:
-            logger.warning(f"Background processor warning: {e}", exc_info=True)
-    else:
-        logger.info("Background processing disabled")
+    # DON'T start background processor on initialization
+    # It will be started manually via separate endpoint if needed
+    logger.info("Skipping background processor (start manually via /api/admin/start-processor)")
     
     _initialized = True
     logger.info("API initialized successfully")
 
+# Initialize immediately but only database
+logger.info("Starting immediate initialization (database only)...")
+_initialize_app()
+logger.info("Immediate initialization complete")
 
-# DON'T initialize immediately - let Flask start first
-logger.info("Module loaded, waiting for first request to initialize...")
-
-
-@app.before_request
-def ensure_initialized():
-    """Ensure app is initialized before handling requests (fallback)"""
-    if not _initialized:
-        try:
-            logger.info("Initializing on first request...")
-            _initialize_app()
-        except Exception as e:
-            logger.error(f"Initialization failed: {e}", exc_info=True)
-
+@app.route('/', methods=['GET'])
+def root():
+    """Root endpoint"""
+    return jsonify({
+        "service": "proposal-generator-api",
+        "status": "running",
+        "version": "1.0.0"
+    }), 200
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
     return jsonify({
         "status": "healthy",
-        "service": "proposal-generator-api"
+        "service": "proposal-generator-api",
+        "initialized": _initialized
     }), 200
 
+@app.route('/api/admin/start-processor', methods=['POST'])
+def start_background_processor():
+    """Manually start background processor (admin only)"""
+    try:
+        if os.environ.get('BACKGROUND_PROCESSING_ENABLED', 'false').lower() != 'true':
+            return jsonify({
+                "status": "disabled",
+                "message": "Background processing is disabled"
+            }), 400
+        
+        processor = get_background_processor()
+        if processor:
+            processor.start()
+            return jsonify({
+                "status": "success",
+                "message": "Background processor started"
+            }), 200
+        else:
+            return jsonify({
+                "status": "error",
+                "message": "Background processor not available"
+            }), 500
+    except Exception as e:
+        logger.error(f"Error starting background processor: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/jobs', methods=['POST'])
 def create_job():
-    """
-    Create a new job
-    
-    Request body:
-    {
-        "project_id": int,
-        "task_type": str,
-        "input_data": dict (optional)
-    }
-    """
+    """Create a new job"""
     try:
         data = request.get_json()
         
@@ -214,6 +208,19 @@ def create_job():
                 "error": "project_id and task_type are required"
             }), 400
         
+        # Get database session
+        db_module = get_db_module()
+        if not db_module or 'db' not in db_module:
+            return jsonify({"error": "Database not available"}), 503
+        
+        get_session = db_module['db'].get_session
+        Job = db_module['models'].Job
+        Project = db_module['models'].Project
+        
+        orchestrator = get_orchestrator()
+        if not orchestrator:
+            return jsonify({"error": "Orchestrator not available"}), 503
+        
         # Verify project exists
         db = get_session()
         try:
@@ -228,8 +235,12 @@ def create_job():
                 input_data=input_data
             )
             
-            # Schedule async execution
-            execute_task_async(job.id, input_data)
+            # Execute async (if available)
+            try:
+                from workers.task_worker import execute_task_async
+                execute_task_async(job.id, input_data)
+            except ImportError:
+                logger.warning("Task worker not available, job will remain pending")
             
             return jsonify({
                 "job_id": job.id,
@@ -245,25 +256,17 @@ def create_job():
         logger.error(f"Error creating job: {e}")
         return jsonify({"error": str(e)}), 500
 
-
 @app.route('/api/jobs/<int:job_id>', methods=['GET'])
 def get_job_status(job_id: int):
-    """
-    Get job status
-    
-    Returns:
-    {
-        "id": int,
-        "project_id": int,
-        "task_type": str,
-        "status": str,
-        "result": dict (optional),
-        "error": str (optional),
-        "created_at": str,
-        "completed_at": str (optional)
-    }
-    """
+    """Get job status"""
     try:
+        db_module = get_db_module()
+        if not db_module or 'db' not in db_module:
+            return jsonify({"error": "Database not available"}), 503
+        
+        get_session = db_module['db'].get_session
+        Job = db_module['models'].Job
+        
         db = get_session()
         try:
             job = db.query(Job).filter(Job.id == job_id).first()
@@ -279,156 +282,13 @@ def get_job_status(job_id: int):
         logger.error(f"Error getting job status: {e}")
         return jsonify({"error": str(e)}), 500
 
-
-@app.route('/api/jobs/<int:job_id>/result', methods=['GET'])
-def get_job_result(job_id: int):
-    """
-    Get job result
-    
-    Returns the result data if job is completed
-    """
-    try:
-        db = get_session()
-        try:
-            job = db.query(Job).filter(Job.id == job_id).first()
-            if not job:
-                return jsonify({"error": f"Job {job_id} not found"}), 404
-            
-            if job.status != "completed":
-                return jsonify({
-                    "error": f"Job is not completed. Current status: {job.status}"
-                }), 400
-            
-            return jsonify({
-                "job_id": job.id,
-                "status": job.status,
-                "result": job.result
-            }), 200
-        
-        finally:
-            db.close()
-    
-    except Exception as e:
-        logger.error(f"Error getting job result: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/jobs/<int:job_id>/cancel', methods=['POST'])
-def cancel_job(job_id: int):
-    """
-    Cancel a job
-    
-    Returns:
-    {
-        "job_id": int,
-        "cancelled": bool,
-        "message": str
-    }
-    """
-    try:
-        cancelled = task_worker.cancel_task(job_id)
-        
-        if cancelled:
-            return jsonify({
-                "job_id": job_id,
-                "cancelled": True,
-                "message": "Job cancelled successfully"
-            }), 200
-        else:
-            return jsonify({
-                "job_id": job_id,
-                "cancelled": False,
-                "message": "Job not found or cannot be cancelled"
-            }), 400
-    
-    except Exception as e:
-        logger.error(f"Error cancelling job: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/jobs', methods=['GET'])
-def list_jobs():
-    """
-    List all jobs (with optional filters)
-    
-    Query parameters:
-    - project_id: Filter by project ID
-    - status: Filter by status (pending, running, completed, failed, cancelled)
-    - task_type: Filter by task type
-    - limit: Maximum number of results (default: 100)
-    - offset: Offset for pagination (default: 0)
-    """
-    try:
-        # Get query parameters
-        project_id = request.args.get('project_id', type=int)
-        status = request.args.get('status')
-        task_type = request.args.get('task_type')
-        limit = request.args.get('limit', 100, type=int)
-        offset = request.args.get('offset', 0, type=int)
-        
-        db = get_session()
-        try:
-            query = db.query(Job)
-            
-            # Apply filters
-            if project_id:
-                query = query.filter(Job.project_id == project_id)
-            if status:
-                query = query.filter(Job.status == status)
-            if task_type:
-                query = query.filter(Job.task_type == task_type)
-            
-            # Order by created_at descending
-            query = query.order_by(Job.created_at.desc())
-            
-            # Apply pagination
-            total = query.count()
-            jobs = query.offset(offset).limit(limit).all()
-            
-            return jsonify({
-                "jobs": [job.to_dict() for job in jobs],
-                "total": total,
-                "limit": limit,
-                "offset": offset
-            }), 200
-        
-        finally:
-            db.close()
-    
-    except Exception as e:
-        logger.error(f"Error listing jobs: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/projects/<int:project_id>/jobs', methods=['GET'])
-def get_project_jobs(project_id: int):
-    """
-    Get all jobs for a specific project
-    
-    Returns list of jobs for the project
-    """
-    try:
-        jobs = orchestrator.get_project_jobs(project_id)
-        return jsonify({"jobs": jobs}), 200
-    
-    except Exception as e:
-        logger.error(f"Error getting project jobs: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
 @app.route('/api/documents/upload', methods=['POST'])
 def upload_document():
-    """
-    Upload and process a document (PDF, DOCX, images, text)
-    Extracts information and stores in knowledge base
-    
-    Accepts:
-    - file: File upload (multipart/form-data)
-    - OR document_data: Base64 encoded file with filename
-    - document_type: Type of document (project_report, team_profile, budget, etc.)
-    - user_id: User ID (optional)
-    """
+    """Upload and process a document"""
     try:
+        import base64
+        from werkzeug.utils import secure_filename
+        
         # Check if file is uploaded
         if 'file' in request.files:
             file = request.files['file']
@@ -440,13 +300,12 @@ def upload_document():
             file_type = filename.split('.')[-1].lower()
         
         # Check if base64 encoded data is provided
-        elif 'document_data' in request.json:
+        elif request.json and 'document_data' in request.json:
             data = request.json
             document_data = data.get('document_data')
             filename = data.get('filename', 'document')
             
             try:
-                # Decode base64
                 file_content = base64.b64decode(document_data)
                 file_type = filename.split('.')[-1].lower() if '.' in filename else 'txt'
             except Exception as e:
@@ -455,43 +314,49 @@ def upload_document():
         else:
             return jsonify({"error": "No file or document_data provided"}), 400
         
-        # Get document type
-        document_type = request.form.get('document_type') or request.json.get('document_type', 'general')
-        user_id = request.form.get('user_id') or request.json.get('user_id', 'default')
+        document_type = request.form.get('document_type') or (request.json.get('document_type') if request.json else 'general')
+        user_id = request.form.get('user_id') or (request.json.get('user_id') if request.json else 'default')
+        
+        # Get document processor
+        doc_processor = get_document_processor()
+        if not doc_processor:
+            return jsonify({"error": "Document processor not available"}), 503
         
         # Process document
         logger.info(f"Processing document: {filename} (type: {document_type})")
-        processed = document_processor.process_document(
+        processed = doc_processor.process_document(
             file_content=file_content,
             filename=filename,
             file_type=file_type
         )
         
         # Extract structured information
-        structured_info = document_processor.extract_structured_info(
+        structured_info = doc_processor.extract_structured_info(
             text=processed['text'],
             document_type=document_type
         )
         
-        # Store in enhanced knowledge base with cross-silo indexing
-        enhanced_kb.add_cross_silo_document(
-            content=processed['text'],
-            metadata={
-                "filename": filename,
-                "file_type": file_type,
-                "document_type": document_type,
-                "user_id": user_id,
-                "char_count": processed.get('char_count', 0),
-                "word_count": processed.get('word_count', 0),
-                "structured_info": structured_info
-            },
-            document_id=f"{user_id}_{filename}",
-            silo_type=document_type
-        )
+        # Store in knowledge base
+        enhanced_kb = get_enhanced_kb()
+        if enhanced_kb:
+            enhanced_kb.add_cross_silo_document(
+                content=processed['text'],
+                metadata={
+                    "filename": filename,
+                    "file_type": file_type,
+                    "document_type": document_type,
+                    "user_id": user_id,
+                    "char_count": processed.get('char_count', 0),
+                    "word_count": processed.get('word_count', 0),
+                    "structured_info": structured_info
+                },
+                document_id=f"{user_id}_{filename}",
+                silo_type=document_type
+            )
         
         return jsonify({
             "status": "success",
-            "message": "Document processed and stored in knowledge base",
+            "message": "Document processed and stored",
             "document": {
                 "filename": filename,
                 "file_type": file_type,
@@ -505,206 +370,9 @@ def upload_document():
         logger.error(f"Error uploading document: {e}")
         return jsonify({"error": str(e)}), 500
 
-
-@app.route('/api/documents/upload-urls', methods=['POST'])
-def upload_urls():
-    """
-    Scrape and process content from URLs (websites, social media)
-    Extracts information and stores in knowledge base
-    
-    Body:
-    {
-        "urls": ["https://example.com", "https://linkedin.com/company/..."],
-        "user_id": "user123",
-        "extract_structured": true
-    }
-    """
-    try:
-        data = request.json
-        urls = data.get('urls', [])
-        user_id = data.get('user_id', 'default')
-        extract_structured = data.get('extract_structured', True)
-        
-        if not urls:
-            return jsonify({"error": "No URLs provided"}), 400
-        
-        results = []
-        for url in urls:
-            try:
-                logger.info(f"Scraping URL: {url}")
-                scraped = website_scraper.scrape_url(url, extract_structured=extract_structured)
-                
-                if scraped.get('success'):
-                    # Store in knowledge base
-                    knowledge_base.add_document(
-                        document_id=f"{user_id}_{url}",
-                        content=scraped.get('text', ''),
-                        metadata={
-                            "url": url,
-                            "platform": scraped.get('platform', 'website'),
-                            "title": scraped.get('title'),
-                            "user_id": user_id,
-                            "structured_info": scraped.get('structured_info', {})
-                        }
-                    )
-                    
-                    results.append({
-                        "url": url,
-                        "status": "success",
-                        "platform": scraped.get('platform'),
-                        "title": scraped.get('title'),
-                        "text_length": len(scraped.get('text', ''))
-                    })
-                else:
-                    results.append({
-                        "url": url,
-                        "status": "error",
-                        "error": scraped.get('error', 'Unknown error')
-                    })
-            
-            except Exception as e:
-                logger.error(f"Error scraping {url}: {e}")
-                results.append({
-                    "url": url,
-                    "status": "error",
-                    "error": str(e)
-                })
-        
-        return jsonify({
-            "status": "success",
-            "message": f"Processed {len([r for r in results if r['status'] == 'success'])} URLs",
-            "results": results
-        }), 200
-    
-    except Exception as e:
-        logger.error(f"Error processing URLs: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/proposals/generate-auto', methods=['POST'])
-def generate_proposal_auto():
-    """
-    Automatically generate proposal using knowledge base
-    Minimal user input required - system uses uploaded documents
-    
-    Body:
-    {
-        "funder_name": "National Science Foundation",
-        "funder_website": "https://www.nsf.gov" (optional),
-        "user_id": "user123",
-        "project_focus": "Education technology" (optional),
-        "budget_amount": 500000 (optional),
-        "additional_requirements": {} (optional)
-    }
-    """
-    try:
-        data = request.json
-        funder_name = data.get('funder_name')
-        user_id = data.get('user_id', 'default')
-        
-        if not funder_name:
-            return jsonify({"error": "funder_name is required"}), 400
-        
-        # Retrieve information from knowledge base
-        logger.info(f"Generating auto proposal for {funder_name} using knowledge base")
-        
-        # Search knowledge base for relevant information
-        query = f"projects activities team budget {data.get('project_focus', '')}"
-        kb_results = knowledge_base.search(
-            query=query,
-            n_results=10,
-            filter_metadata={"user_id": user_id} if user_id != "default" else None
-        )
-        
-        # Extract information from knowledge base
-        extracted_info = {
-            "projects": [],
-            "team": [],
-            "activities": [],
-            "budget": {},
-            "organizational_info": {}
-        }
-        
-        for result in kb_results:
-            metadata = result.get('metadata', {})
-            structured = metadata.get('structured_info', {})
-            
-            if 'projects' in structured:
-                extracted_info['projects'].extend(structured['projects'])
-            if 'team_members' in structured:
-                extracted_info['team'].extend(structured['team_members'])
-            if 'activities' in structured:
-                extracted_info['activities'].extend(structured['activities'])
-            if 'budget_items' in structured:
-                extracted_info['budget'].update(structured)
-        
-        # Research funder
-        from agents.research.funder_intelligence import FunderIntelligenceAgent
-        funder_agent = FunderIntelligenceAgent()
-        funder_info = funder_agent.research_funder(
-            funder_name=funder_name,
-            website=data.get('funder_website'),
-            deep_research=True
-        )
-        
-        # Create proposal generation job
-        job_data = {
-            "task_type": "generate_proposal_auto",
-            "input_data": {
-                "funder_name": funder_name,
-                "funder_info": funder_info,
-                "user_id": user_id,
-                "extracted_info": extracted_info,
-                "project_focus": data.get('project_focus'),
-                "budget_amount": data.get('budget_amount'),
-                "additional_requirements": data.get('additional_requirements', {})
-            }
-        }
-        
-        # Create job in database
-        db = get_session()
-        try:
-            job = Job(
-                task_type=job_data["task_type"],
-                status="pending",
-                result=None
-            )
-            db.add(job)
-            db.commit()
-            job_id = job.id
-            
-            # Execute in background
-            execute_task_async(job_id, job_data["input_data"])
-            
-            return jsonify({
-                "status": "success",
-                "message": "Proposal generation started",
-                "job_id": job_id,
-                "funder": funder_name,
-                "knowledge_base_used": len(kb_results) > 0,
-                "info_sources": len(kb_results)
-            }), 202
-        
-        finally:
-            db.close()
-    
-    except Exception as e:
-        logger.error(f"Error generating auto proposal: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
 @app.route('/api/knowledge-base/search', methods=['POST'])
 def search_knowledge_base():
-    """
-    Search knowledge base for information
-    
-    Body:
-    {
-        "query": "search query",
-        "user_id": "user123",
-        "n_results": 10
-    }
-    """
+    """Search knowledge base"""
     try:
         data = request.json
         query = data.get('query')
@@ -714,7 +382,11 @@ def search_knowledge_base():
         if not query:
             return jsonify({"error": "query is required"}), 400
         
-        results = knowledge_base.search(
+        kb = get_knowledge_base()
+        if not kb:
+            return jsonify({"error": "Knowledge base not available"}), 503
+        
+        results = kb.search(
             query=query,
             n_results=n_results,
             filter_metadata={"user_id": user_id} if user_id != "default" else None
@@ -731,305 +403,10 @@ def search_knowledge_base():
         logger.error(f"Error searching knowledge base: {e}")
         return jsonify({"error": str(e)}), 500
 
-
-@app.route('/api/knowledge-base/documents', methods=['GET'])
-def list_knowledge_base_documents():
-    """
-    List all documents in knowledge base for a user
-    """
-    try:
-        user_id = request.args.get('user_id', 'default')
-        limit = int(request.args.get('limit', 50))
-        
-        # Get documents from knowledge base
-        # Note: This is a simplified version - actual implementation depends on ChromaDB API
-        return jsonify({
-            "status": "success",
-            "user_id": user_id,
-            "message": "Knowledge base documents listing"
-        }), 200
-    
-    except Exception as e:
-        logger.error(f"Error listing documents: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/eligibility/check', methods=['POST'])
-def check_eligibility():
-    """
-    Check if user qualifies for a funding opportunity/contract/loan
-    
-    Body:
-    {
-        "funder_name": "National Science Foundation",
-        "funder_website": "https://www.nsf.gov" (optional),
-        "user_id": "user123",
-        "opportunity_type": "grant"  // "grant", "contract", "loan"
-    }
-    """
-    try:
-        data = request.json
-        funder_name = data.get('funder_name')
-        user_id = data.get('user_id', 'default')
-        opportunity_type = data.get('opportunity_type', 'grant')
-        
-        if not funder_name:
-            return jsonify({"error": "funder_name is required"}), 400
-        
-        # Research funder
-        from agents.research.funder_intelligence import FunderIntelligenceAgent
-        funder_agent = FunderIntelligenceAgent()
-        funder_info = funder_agent.research_funder(
-            funder_name=funder_name,
-            website=data.get('funder_website'),
-            deep_research=True
-        )
-        
-        # Get user profile from knowledge base
-        user_profile_query = "organization profile team projects budget experience"
-        kb_results = knowledge_base.search(
-            query=user_profile_query,
-            n_results=10,
-            filter_metadata={"user_id": user_id} if user_id != "default" else None
-        )
-        
-        # Build user profile from knowledge base
-        user_profile = {
-            "organization_type": "organization",
-            "projects": [],
-            "team": [],
-            "budget": {},
-            "experience": [],
-            "focus_areas": []
-        }
-        
-        knowledge_base_data = {}
-        for result in kb_results:
-            metadata = result.get('metadata', {})
-            structured = metadata.get('structured_info', {})
-            
-            if 'projects' in structured:
-                user_profile['projects'].extend(structured['projects'])
-            if 'team_members' in structured:
-                user_profile['team'].extend(structured['team_members'])
-            if 'budget_items' in structured:
-                user_profile['budget'].update(structured)
-            if 'activities' in structured:
-                user_profile['experience'].extend(structured.get('activities', []))
-        
-        # Assess eligibility
-        from agents.eligibility_assessor import EligibilityAssessorAgent
-        assessor = EligibilityAssessorAgent()
-        
-        assessment = assessor.assess_eligibility(
-            funder_info=funder_info,
-            user_profile=user_profile,
-            knowledge_base_data=knowledge_base_data
-        )
-        
-        return jsonify({
-            "status": "success",
-            "funder": funder_name,
-            "opportunity_type": opportunity_type,
-            "assessment": assessment
-        }), 200
-    
-    except Exception as e:
-        logger.error(f"Error checking eligibility: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/proposals/create-presentation', methods=['POST'])
-def create_presentation():
-    """
-    Create executive-level presentation with visualizations
-    
-    Body:
-    {
-        "proposal": {...},
-        "opportunity_type": "funding" or "contract" or "compliance",
-        "presentation_style": "executive" or "presidential" or "board"
-    }
-    """
-    try:
-        data = request.json
-        proposal = data.get('proposal', {})
-        opportunity_type = data.get('opportunity_type', 'funding')
-        presentation_style = data.get('presentation_style', 'executive')
-        
-        from agents.data_science.visualization_agent import DataVisualizationAgent
-        viz_agent = DataVisualizationAgent()
-        
-        presentation = viz_agent.create_executive_presentation(
-            proposal_data=proposal,
-            opportunity_type=opportunity_type,
-            presentation_style=presentation_style
-        )
-        
-        return jsonify({
-            "status": "success",
-            "presentation": presentation,
-            "visualizations": presentation.get("visualizations", []),
-            "narrative": presentation.get("narrative", ""),
-            "insights": presentation.get("insights", [])
-        }), 200
-    
-    except Exception as e:
-        logger.error(f"Error creating presentation: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/proposals/screen', methods=['POST'])
-def screen_proposal():
-    """
-    Screen proposal to ensure it passes funder screening before delivery
-    
-    Body:
-    {
-        "proposal": {...},
-        "funder_name": "National Science Foundation" or "UN Procurement" or "World Bank",
-        "opportunity_type": "funding" or "contract" or "compliance_audit",
-        "job_id": 123  // Optional: job ID if screening existing proposal
-    }
-    """
-    try:
-        data = request.json
-        proposal = data.get('proposal')
-        funder_name = data.get('funder_name')
-        job_id = data.get('job_id')
-        
-        # If job_id provided, get proposal from job
-        if job_id and not proposal:
-            db = get_session()
-            try:
-                job = db.query(Job).filter(Job.id == job_id).first()
-                if job and job.result:
-                    import json
-                    if isinstance(job.result, str):
-                        job_result = json.loads(job.result)
-                    else:
-                        job_result = job.result
-                    proposal = job_result.get("proposal", {})
-            finally:
-                db.close()
-        
-        if not proposal:
-            return jsonify({"error": "proposal is required"}), 400
-        
-        if not funder_name:
-            return jsonify({"error": "funder_name is required"}), 400
-        
-        # Get funder info
-        from agents.research.funder_intelligence import FunderIntelligenceAgent
-        funder_agent = FunderIntelligenceAgent()
-        funder_info = funder_agent.get_funder_info(funder_name)
-        
-        if not funder_info:
-            funder_info = funder_agent.research_funder(funder_name, deep_research=False)
-        
-        # Screen proposal
-        from agents.screening_pass_agent import ScreeningPassAgent
-        screening_agent = ScreeningPassAgent()
-        
-        # Get opportunity type
-        opportunity_type = data.get('opportunity_type', 'funding')
-        
-        screening_result = screening_agent.screen_proposal(
-            proposal=proposal,
-            funder_info=funder_info,
-            requirements=funder_info.get("requirements", {}),
-            opportunity_type=opportunity_type
-        )
-        
-        return jsonify({
-            "status": "success",
-            "funder": funder_name,
-            "screening_result": screening_result,
-            "ready_for_submission": screening_result["will_pass"]
-        }), 200
-    
-    except Exception as e:
-        logger.error(f"Error screening proposal: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/eligibility/compare', methods=['POST'])
-def compare_opportunities():
-    """
-    Compare multiple funding opportunities and rank by eligibility
-    
-    Body:
-    {
-        "opportunities": [
-            {"name": "NSF", "website": "https://www.nsf.gov"},
-            {"name": "NIH", "website": "https://www.nih.gov"}
-        ],
-        "user_id": "user123"
-    }
-    """
-    try:
-        data = request.json
-        opportunities_data = data.get('opportunities', [])
-        user_id = data.get('user_id', 'default')
-        
-        if not opportunities_data:
-            return jsonify({"error": "opportunities list is required"}), 400
-        
-        # Research all opportunities
-        from agents.research.funder_intelligence import FunderIntelligenceAgent
-        funder_agent = FunderIntelligenceAgent()
-        
-        opportunities = []
-        for opp in opportunities_data:
-            funder_info = funder_agent.research_funder(
-                funder_name=opp.get('name'),
-                website=opp.get('website'),
-                deep_research=False
-            )
-            opportunities.append(funder_info)
-        
-        # Get user profile
-        user_profile_query = "organization profile team projects"
-        kb_results = knowledge_base.search(
-            query=user_profile_query,
-            n_results=5,
-            filter_metadata={"user_id": user_id} if user_id != "default" else None
-        )
-        
-        user_profile = {"projects": [], "team": [], "budget": {}}
-        for result in kb_results:
-            structured = result.get('metadata', {}).get('structured_info', {})
-            if 'projects' in structured:
-                user_profile['projects'].extend(structured['projects'])
-            if 'team_members' in structured:
-                user_profile['team'].extend(structured['team_members'])
-        
-        # Compare opportunities
-        from agents.eligibility_assessor import EligibilityAssessorAgent
-        assessor = EligibilityAssessorAgent()
-        
-        comparison = assessor.compare_opportunities(
-            opportunities=opportunities,
-            user_profile=user_profile
-        )
-        
-        return jsonify({
-            "status": "success",
-            "user_id": user_id,
-            "comparison": comparison,
-            "top_opportunity": comparison[0] if comparison else None
-        }), 200
-    
-    except Exception as e:
-        logger.error(f"Error comparing opportunities: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors"""
     return jsonify({"error": "Endpoint not found"}), 404
-
 
 @app.errorhandler(500)
 def internal_error(error):
@@ -1037,12 +414,8 @@ def internal_error(error):
     logger.error(f"Internal server error: {error}")
     return jsonify({"error": "Internal server error"}), 500
 
-
 # Entry point for direct execution
 if __name__ == '__main__':
-    # Initialize app when running directly
-    _initialize_app()
-    
     port = int(os.environ.get('PORT', 5000))
     logger.info(f"Starting Flask app on 0.0.0.0:{port}")
     app.run(host='0.0.0.0', port=port, debug=False)
