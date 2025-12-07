@@ -232,3 +232,4 @@ class TestScalability:
         assert size < max_size, f"Memory usage {size} bytes exceeds {max_size} bytes"
 
 
+

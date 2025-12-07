@@ -360,3 +360,4 @@ def render_document_comparison(document1_id: str, document2_id: str, api_client)
             st.error(f"Download failed: {str(e)}")
 
 
+

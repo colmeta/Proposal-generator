@@ -360,3 +360,4 @@ def render_job_details(job_id: str):
             st.rerun()
 
 
+

@@ -260,3 +260,4 @@ class TestBruteForceProtection:
         assert captcha_required is True
 
 
+
